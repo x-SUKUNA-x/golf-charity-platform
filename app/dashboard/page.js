@@ -1,19 +1,26 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
 export default function Dashboard() {
     const router = useRouter()
+    const searchParams = useSearchParams()
     const [user, setUser] = useState(null)
     const [profile, setProfile] = useState(null)
-    const [scores, setScores] = useState([])
+    const [scores, setScores] = useState([]
+    )
+    const [wins, setWins] = useState([])
     const [newScore, setNewScore] = useState('')
     const [newDate, setNewDate] = useState('')
     const [loading, setLoading] = useState(true)
     const [message, setMessage] = useState('')
     const [charity, setCharity] = useState(null)
+    const [proofMsg, setProofMsg] = useState('')
+    const [uploadingFor, setUploadingFor] = useState(null)
+    const fileInputRef = useRef(null)
+    const paymentSuccess = searchParams.get('payment') === 'success'
 
     useEffect(() => {
         const getUser = async () => {
@@ -22,6 +29,7 @@ export default function Dashboard() {
             setUser(session.user)
             fetchProfile(session.user.id)
             fetchScores(session.user.id)
+            fetchWins(session.user.id)
         }
         getUser()
     }, [])
@@ -41,6 +49,15 @@ export default function Dashboard() {
         setLoading(false)
     }
 
+    const fetchWins = async (userId) => {
+        const { data } = await supabase
+            .from('winners')
+            .select('*, draws(month, winning_numbers)')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+        setWins(data || [])
+    }
+
     const addScore = async () => {
         if (!newScore || !newDate) { setMessage('Please enter both score and date!'); return }
         if (newScore < 1 || newScore > 45) { setMessage('Score must be between 1 and 45!'); return }
@@ -54,17 +71,58 @@ export default function Dashboard() {
             played_at: newDate,
         })
         if (error) { setMessage('Error adding score!'); return }
-        setMessage('Score added!')
+        setMessage('Score added! ✓')
         setNewScore('')
         setNewDate('')
         fetchScores(user.id)
         setTimeout(() => setMessage(''), 3000)
     }
 
+    const uploadProof = async (winnerId, file) => {
+        if (!file) return
+        setUploadingFor(winnerId)
+        setProofMsg('')
+        const ext = file.name.split('.').pop()
+        const path = `${winnerId}/proof.${ext}`
+
+        const { error: uploadError } = await supabase.storage
+            .from('winner-proofs')
+            .upload(path, file, { upsert: true })
+
+        if (uploadError) {
+            setProofMsg('Upload failed. Please try again.')
+            setUploadingFor(null)
+            return
+        }
+
+        const { data: { publicUrl } } = supabase.storage.from('winner-proofs').getPublicUrl(path)
+
+        await supabase.from('winners').update({
+            proof_url: publicUrl,
+            payment_status: 'proof_uploaded'
+        }).eq('id', winnerId)
+
+        setProofMsg('Proof submitted ✅ Admin will review your submission.')
+        setUploadingFor(null)
+        fetchWins(user.id)
+    }
+
     const handleLogout = async () => {
         await supabase.auth.signOut()
         router.push('/')
     }
+
+    // Derived stats for draw history section
+    const totalWon = wins.filter(w => w.payment_status === 'paid').reduce((sum, w) => sum + (w.amount || 0), 0)
+    const bestMatch = wins.length > 0
+        ? wins.sort((a, b) => {
+            const order = { '5-match': 3, '4-match': 2, '3-match': 1 }
+            return (order[b.tier] || 0) - (order[a.tier] || 0)
+        })[0]?.tier || '—'
+        : '—'
+
+    // Wins needing action (pending proof or awaiting review)
+    const actionableWins = wins.filter(w => w.payment_status === 'pending' || w.payment_status === 'proof_uploaded')
 
     if (loading) return (
         <main className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center">
@@ -83,17 +141,86 @@ export default function Dashboard() {
                     <h1 className="text-base font-semibold">GolfGives</h1>
                 </div>
                 <div className="flex items-center gap-6">
-                    <Link href="/admin" className="text-white/30 hover:text-white text-sm transition">
-                        Admin
-                    </Link>
+                    <Link href="/admin" className="text-white/30 hover:text-white text-sm transition">Admin</Link>
                     <span className="text-white/30 text-sm">{user?.email}</span>
-                    <button onClick={handleLogout} className="text-white/30 hover:text-white text-sm transition">
-                        Sign out
-                    </button>
+                    <button onClick={handleLogout} className="text-white/30 hover:text-white text-sm transition">Sign out</button>
                 </div>
             </nav>
 
             <div className="max-w-5xl mx-auto px-6 py-10">
+
+                {/* PAYMENT SUCCESS BANNER */}
+                {paymentSuccess && (
+                    <div className="bg-green-500/10 border border-green-500/20 rounded-2xl p-4 mb-6 flex items-center gap-3">
+                        <span className="text-green-400 text-xl">🎉</span>
+                        <div>
+                            <p className="text-green-400 font-semibold text-sm">Payment successful! Welcome to GolfGives.</p>
+                            <p className="text-white/40 text-xs mt-0.5">Your subscription is now active. Start entering your scores!</p>
+                        </div>
+                    </div>
+                )}
+
+                {/* 🏆 YOU WON BANNER */}
+                {actionableWins.length > 0 && (
+                    <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-6 mb-6">
+                        <div className="flex items-center gap-3 mb-4">
+                            <span className="text-2xl">🏆</span>
+                            <div>
+                                <p className="text-yellow-400 font-bold">You won a prize draw!</p>
+                                <p className="text-white/40 text-sm">Upload proof of your scores to claim your prize.</p>
+                            </div>
+                        </div>
+
+                        {proofMsg && (
+                            <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 mb-4">
+                                <p className="text-white/60 text-sm">{proofMsg}</p>
+                            </div>
+                        )}
+
+                        <div className="flex flex-col gap-3">
+                            {actionableWins.map((w) => (
+                                <div key={w.id} className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                    <div className="flex items-center gap-4">
+                                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                                            w.tier === '5-match' ? 'bg-yellow-500/20 text-yellow-400' :
+                                            w.tier === '4-match' ? 'bg-blue-500/20 text-blue-400' :
+                                            'bg-purple-500/20 text-purple-400'}`}>
+                                            {w.tier}
+                                        </span>
+                                        <span className="text-white font-semibold">£{w.amount}</span>
+                                        <span className="text-white/30 text-sm">{w.draws?.month}</span>
+                                    </div>
+
+                                    {w.payment_status === 'pending' && (
+                                        <>
+                                            <input
+                                                type="file"
+                                                ref={fileInputRef}
+                                                accept="image/*,.pdf"
+                                                className="hidden"
+                                                onChange={(e) => uploadProof(w.id, e.target.files[0])}
+                                            />
+                                            <button
+                                                onClick={() => fileInputRef.current?.click()}
+                                                disabled={uploadingFor === w.id}
+                                                className="bg-yellow-400 text-black font-semibold px-5 py-2 rounded-xl text-sm hover:bg-yellow-300 transition disabled:opacity-50"
+                                            >
+                                                {uploadingFor === w.id ? 'Uploading...' : '📎 Upload Score Proof'}
+                                            </button>
+                                        </>
+                                    )}
+
+                                    {w.payment_status === 'proof_uploaded' && (
+                                        <span className="text-white/40 text-sm bg-white/5 border border-white/10 rounded-xl px-4 py-2">
+                                            ⏳ Proof submitted — awaiting admin review
+                                        </span>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {/* WELCOME */}
                 <div className="mb-10">
                     <h2 className="text-3xl font-bold tracking-tight">Good to see you 👋</h2>
@@ -103,22 +230,30 @@ export default function Dashboard() {
                 {/* TOP CARDS */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
                     {/* Subscription */}
-                    <div className={`rounded-2xl p-6 border ${profile?.subscription_status === 'active'
-                            ? 'bg-green-500/5 border-green-500/20'
-                            : 'bg-white/[0.03] border-white/[0.06]'
-                        }`}>
+                    <div className={`rounded-2xl p-6 border ${
+                        profile?.subscription_status === 'active' ? 'bg-green-500/5 border-green-500/20' :
+                        profile?.subscription_status === 'lapsed' ? 'bg-red-500/5 border-red-500/20' :
+                        'bg-white/[0.03] border-white/[0.06]'}`}>
                         <p className="text-white/40 text-sm mb-3">Subscription</p>
                         {profile?.subscription_status === 'active' ? (
                             <>
                                 <p className="text-green-400 font-semibold">Active ✓</p>
                                 <p className="text-white/30 text-sm mt-1 capitalize">{profile?.plan} plan</p>
+                                {profile?.subscription_end_date && (
+                                    <p className="text-white/20 text-xs mt-2">
+                                        Renews {new Date(profile.subscription_end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                    </p>
+                                )}
+                            </>
+                        ) : profile?.subscription_status === 'lapsed' ? (
+                            <>
+                                <p className="text-red-400 font-semibold">Payment failed</p>
+                                <Link href="/subscribe" className="text-white text-sm mt-2 inline-block underline underline-offset-4">Resubscribe →</Link>
                             </>
                         ) : (
                             <>
                                 <p className="text-white/60 font-semibold">Not subscribed</p>
-                                <Link href="/subscribe" className="text-white text-sm mt-2 inline-block underline underline-offset-4">
-                                    Subscribe now →
-                                </Link>
+                                <Link href="/subscribe" className="text-white text-sm mt-2 inline-block underline underline-offset-4">Subscribe now →</Link>
                             </>
                         )}
                     </div>
@@ -134,9 +269,7 @@ export default function Dashboard() {
                         ) : (
                             <>
                                 <p className="text-white/60 font-semibold">Not selected</p>
-                                <Link href="/charities" className="text-white text-sm mt-2 inline-block underline underline-offset-4">
-                                    Choose charity →
-                                </Link>
+                                <Link href="/charities" className="text-white text-sm mt-2 inline-block underline underline-offset-4">Choose charity →</Link>
                             </>
                         )}
                     </div>
@@ -144,10 +277,11 @@ export default function Dashboard() {
                     {/* Next Draw */}
                     <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6">
                         <p className="text-white/40 text-sm mb-3">Next Draw</p>
-                        <p className="text-white font-semibold">April 2026</p>
-                        <p className="text-white/30 text-sm mt-1">
-                            {scores.length}/5 scores entered
+                        <p className="text-white font-semibold">
+                            {new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1)
+                                .toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
                         </p>
+                        <p className="text-white/30 text-sm mt-1">{scores.length}/5 scores entered</p>
                     </div>
                 </div>
 
@@ -157,42 +291,51 @@ export default function Dashboard() {
                         <h3 className="font-semibold mb-1">Enter Score</h3>
                         <p className="text-white/30 text-sm mb-6">Stableford format · 1 to 45 points</p>
 
-                        {message && (
-                            <div className="bg-white/5 border border-white/10 rounded-xl p-3 mb-4">
-                                <p className="text-white/60 text-sm">{message}</p>
+                        {profile?.subscription_status !== 'active' ? (
+                            <div className="flex flex-col items-center justify-center h-32 text-center gap-3">
+                                <p className="text-white/30 text-sm">Subscribe to enter scores</p>
+                                <Link href="/subscribe" className="bg-white text-black font-semibold px-5 py-2 rounded-xl text-sm hover:bg-white/90 transition">
+                                    Subscribe now →
+                                </Link>
                             </div>
+                        ) : (
+                            <>
+                                {message && (
+                                    <div className="bg-white/5 border border-white/10 rounded-xl p-3 mb-4">
+                                        <p className="text-white/60 text-sm">{message}</p>
+                                    </div>
+                                )}
+                                <div className="flex flex-col gap-3">
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="45"
+                                        placeholder="Score (e.g. 32)"
+                                        value={newScore}
+                                        onChange={(e) => setNewScore(e.target.value)}
+                                        className="bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-white/30 placeholder:text-white/20"
+                                    />
+                                    <input
+                                        type="date"
+                                        value={newDate}
+                                        onChange={(e) => setNewDate(e.target.value)}
+                                        className="bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-white/30"
+                                    />
+                                    <button
+                                        onClick={addScore}
+                                        className="bg-white text-black font-semibold py-3 rounded-xl hover:bg-white/90 transition text-sm"
+                                    >
+                                        Add Score →
+                                    </button>
+                                </div>
+                            </>
                         )}
-
-                        <div className="flex flex-col gap-3">
-                            <input
-                                type="number"
-                                min="1"
-                                max="45"
-                                placeholder="Score (e.g. 32)"
-                                value={newScore}
-                                onChange={(e) => setNewScore(e.target.value)}
-                                className="bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-white/30 placeholder:text-white/20"
-                            />
-                            <input
-                                type="date"
-                                value={newDate}
-                                onChange={(e) => setNewDate(e.target.value)}
-                                className="bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-white/30"
-                            />
-                            <button
-                                onClick={addScore}
-                                className="bg-white text-black font-semibold py-3 rounded-xl hover:bg-white/90 transition text-sm"
-                            >
-                                Add Score →
-                            </button>
-                        </div>
                     </div>
 
                     {/* SCORES LIST */}
                     <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-8">
                         <h3 className="font-semibold mb-1">My Scores</h3>
                         <p className="text-white/30 text-sm mb-6">Last 5 rounds · most recent first</p>
-
                         {scores.length === 0 ? (
                             <div className="flex flex-col items-center justify-center h-32 text-center">
                                 <p className="text-white/20 text-sm">No scores yet</p>
@@ -213,16 +356,16 @@ export default function Dashboard() {
                         )}
                     </div>
 
-                    {/* DRAW STATS */}
+                    {/* DRAW HISTORY — real data */}
                     <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-8 md:col-span-2">
-                        <h3 className="font-semibold mb-1">Draw History</h3>
-                        <p className="text-white/30 text-sm mb-6">Your participation and winnings</p>
+                        <h3 className="font-semibold mb-1">My Winnings</h3>
+                        <p className="text-white/30 text-sm mb-6">Your prize draw history</p>
 
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-3 gap-4 mb-6">
                             {[
-                                { label: 'Draws Entered', value: '0' },
-                                { label: 'Total Won', value: '£0' },
-                                { label: 'Best Match', value: '—' },
+                                { label: 'Total Wins', value: wins.length > 0 ? wins.length : '0' },
+                                { label: 'Total Paid Out', value: totalWon > 0 ? `£${totalWon.toFixed(2)}` : '£0' },
+                                { label: 'Best Match', value: bestMatch },
                             ].map((stat) => (
                                 <div key={stat.label} className="text-center p-6 bg-white/[0.02] rounded-xl border border-white/[0.04]">
                                     <p className="text-3xl font-bold">{stat.value}</p>
@@ -230,6 +373,32 @@ export default function Dashboard() {
                                 </div>
                             ))}
                         </div>
+
+                        {wins.length > 0 && (
+                            <div className="flex flex-col gap-2">
+                                {wins.map((w) => (
+                                    <div key={w.id} className="flex justify-between items-center p-4 bg-white/[0.02] rounded-xl border border-white/[0.04]">
+                                        <div className="flex items-center gap-3">
+                                            <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                                                w.tier === '5-match' ? 'bg-yellow-500/20 text-yellow-400' :
+                                                w.tier === '4-match' ? 'bg-blue-500/20 text-blue-400' :
+                                                'bg-purple-500/20 text-purple-400'}`}>
+                                                {w.tier}
+                                            </span>
+                                            <span className="text-white text-sm font-semibold">£{w.amount}</span>
+                                            <span className="text-white/30 text-xs">{w.draws?.month}</span>
+                                        </div>
+                                        <span className={`text-xs px-3 py-1 rounded-full ${
+                                            w.payment_status === 'paid' ? 'bg-green-500/10 text-green-400' :
+                                            w.payment_status === 'rejected' ? 'bg-red-500/10 text-red-400' :
+                                            w.payment_status === 'proof_uploaded' ? 'bg-blue-500/10 text-blue-400' :
+                                            'bg-yellow-500/10 text-yellow-400'}`}>
+                                            {w.payment_status === 'proof_uploaded' ? 'Under review' : w.payment_status}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

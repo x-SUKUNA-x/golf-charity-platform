@@ -3,9 +3,11 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useAuthGuard } from '@/hooks/useAuthGuard'
 
 export default function Charities() {
     const router = useRouter()
+    const { user, loading: authLoading } = useAuthGuard()
     const [charities, setCharities] = useState([])
     const [selected, setSelected] = useState(null)
     const [percent, setPercent] = useState(10)
@@ -14,8 +16,10 @@ export default function Charities() {
     const [message, setMessage] = useState('')
 
     useEffect(() => {
-        fetchCharities()
-    }, [])
+        if (!authLoading && user) {
+            fetchCharities()
+        }
+    }, [authLoading, user])
 
     const fetchCharities = async () => {
         const { data } = await supabase.from('charities').select('*')
@@ -30,25 +34,19 @@ export default function Charities() {
         }
         setSaving(true)
 
-        const { data: { session } } = await supabase.auth.getSession()
-        if (!session) {
-            router.push('/login')
-            return
-        }
-
         await supabase.from('users').update({
             charity_id: selected,
             charity_percent: percent
-        }).eq('id', session.user.id)
+        }).eq('id', user.id)
 
         setMessage('Charity saved! ✅')
         setSaving(false)
         setTimeout(() => router.push('/dashboard'), 1000)
     }
 
-    if (loading) return (
-        <main className="min-h-screen bg-black text-white flex items-center justify-center">
-            <p className="text-green-400 animate-pulse">Loading charities...</p>
+    if (authLoading || loading) return (
+        <main className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center">
+            <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
         </main>
     )
 

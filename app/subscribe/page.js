@@ -1,26 +1,45 @@
 'use client'
-import { useState } from 'react'
-import { supabase } from '@/lib/supabase'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { useAuthGuard } from '@/hooks/useAuthGuard'
 
 export default function Subscribe() {
     const router = useRouter()
+    const searchParams = useSearchParams()
+    const { user, loading: authLoading } = useAuthGuard()
     const [loading, setLoading] = useState(false)
+    const [error, setError] = useState('')
     const [selected, setSelected] = useState('monthly')
+    const cancelled = searchParams.get('cancelled')
 
     const handleSubscribe = async () => {
         setLoading(true)
-        const { data: { session } } = await supabase.auth.getSession()
-        if (!session) { router.push('/login'); return }
-
-        await supabase.from('users').update({
-            plan: selected,
-            subscription_status: 'active'
-        }).eq('id', session.user.id)
-
-        router.push('/dashboard')
+        setError('')
+        try {
+            const res = await fetch('/api/create-checkout-session', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    plan: selected,
+                    userId: user.id,
+                    userEmail: user.email,
+                }),
+            })
+            const { url, error: apiError } = await res.json()
+            if (apiError) throw new Error(apiError)
+            window.location.href = url
+        } catch (err) {
+            setError('Something went wrong. Please try again.')
+            setLoading(false)
+        }
     }
+
+    if (authLoading) return (
+        <main className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center">
+            <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+        </main>
+    )
 
     return (
         <main className="min-h-screen bg-[#0a0a0a] text-white">
@@ -38,6 +57,21 @@ export default function Subscribe() {
             </nav>
 
             <div className="max-w-3xl mx-auto px-6 py-16">
+
+                {/* CANCELLED BANNER */}
+                {cancelled && (
+                    <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-4 mb-8 text-center">
+                        <p className="text-yellow-400 text-sm">Payment was cancelled. Choose a plan and try again.</p>
+                    </div>
+                )}
+
+                {/* ERROR BANNER */}
+                {error && (
+                    <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 mb-8 text-center">
+                        <p className="text-red-400 text-sm">{error}</p>
+                    </div>
+                )}
+
                 {/* HEADER */}
                 <div className="text-center mb-16">
                     <p className="text-white/40 text-sm font-medium uppercase tracking-widest mb-4">Pricing</p>

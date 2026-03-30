@@ -197,8 +197,13 @@ export default function Admin() {
 
     const addCharity = async () => {
         if (!newCharity.name) { setCharityMsg('Please enter charity name!'); return }
-        await supabase.from('charities').insert({ name: newCharity.name, description: newCharity.description })
-        setNewCharity({ name: '', description: '' })
+        await supabase.from('charities').insert({
+            name: newCharity.name,
+            description: newCharity.description,
+            category: newCharity.category || null,
+            is_featured: newCharity.is_featured || false,
+        })
+        setNewCharity({ name: '', description: '', category: '', is_featured: false })
         setCharityMsg('Charity added! ✅')
         fetchAll()
     }
@@ -545,21 +550,62 @@ export default function Admin() {
                                     onChange={(e) => setNewCharity({ ...newCharity, description: e.target.value })}
                                     className="bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-white/30 placeholder:text-white/20"
                                 />
+                                <input
+                                    type="text"
+                                    placeholder="Category (e.g. health, environment, education)"
+                                    value={newCharity.category || ''}
+                                    onChange={(e) => setNewCharity({ ...newCharity, category: e.target.value })}
+                                    className="bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-white/30 placeholder:text-white/20"
+                                />
+                                <label className="flex items-center gap-3 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        checked={newCharity.is_featured || false}
+                                        onChange={(e) => setNewCharity({ ...newCharity, is_featured: e.target.checked })}
+                                        className="w-4 h-4 accent-white"
+                                    />
+                                    <span className="text-white/50 text-sm">Mark as featured charity</span>
+                                </label>
                                 <button onClick={addCharity} className="bg-white text-black font-semibold py-3 rounded-xl hover:bg-white/90 text-sm">
                                     Add Charity →
                                 </button>
                             </div>
                         </div>
+
                         <div className="flex flex-col gap-3">
                             {charities.map((c) => (
                                 <div key={c.id} className="bg-white/[0.03] border border-white/[0.06] p-5 rounded-2xl flex justify-between items-center">
                                     <div>
-                                        <p className="font-medium text-sm">{c.name}</p>
-                                        <p className="text-white/30 text-sm mt-1">{c.description}</p>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <p className="font-medium text-sm">{c.name}</p>
+                                            {c.is_featured && (
+                                                <span className="bg-yellow-400/20 text-yellow-400 text-xs font-bold px-2 py-0.5 rounded-full">⭐ Featured</span>
+                                            )}
+                                            {c.category && (
+                                                <span className="bg-white/5 border border-white/10 text-white/30 text-xs px-2 py-0.5 rounded-full capitalize">{c.category}</span>
+                                            )}
+                                        </div>
+                                        <p className="text-white/30 text-sm">{c.description}</p>
                                     </div>
-                                    <button onClick={() => deleteCharity(c.id)} className="text-red-400/60 hover:text-red-400 text-sm transition">
-                                        Delete
-                                    </button>
+                                    <div className="flex items-center gap-2 ml-4 flex-shrink-0">
+                                        <button
+                                            onClick={async () => {
+                                                await supabase.from('charities').update({ is_featured: !c.is_featured }).eq('id', c.id)
+                                                fetchAll()
+                                            }}
+                                            className={`text-xs font-medium px-3 py-1.5 rounded-xl transition ${c.is_featured
+                                                ? 'bg-yellow-400/10 text-yellow-400 hover:bg-yellow-400/20'
+                                                : 'bg-white/5 text-white/30 hover:text-white'}`}
+                                        >
+                                            {c.is_featured ? '★ Unfeature' : '☆ Feature'}
+                                        </button>
+                                        <button
+                                            onClick={() => deleteCharity(c.id)}
+                                            className="text-red-400/60 hover:text-red-400 text-sm transition"
+                                        >
+                                            Delete
+                                        </button>
+                                    </div>
                                 </div>
                             ))}
                         </div>

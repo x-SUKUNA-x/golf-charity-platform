@@ -154,13 +154,22 @@ export default function Admin() {
                 else if (matches >= 3) { tier = '3-match'; amount = parseFloat(prizeAmount) }
 
                 if (tier) {
-                    await supabase.from('winners').insert({
+                    const { data: newWinner } = await supabase.from('winners').insert({
                         user_id: userId,
                         draw_id: draw.id,
                         tier,
                         amount,
                         payment_status: 'pending'
-                    })
+                    }).select().single()
+
+                    // Notify winner by email
+                    if (newWinner?.id) {
+                        await fetch('/api/notify-winner', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ winnerId: newWinner.id, type: 'won' })
+                        })
+                    }
                 }
             }
 
@@ -182,11 +191,38 @@ export default function Admin() {
 
     const publishDraw = async (drawId) => {
         await supabase.from('draws').update({ status: 'published' }).eq('id', drawId)
+
+        // Notify all active subscribers about draw results
+        const draw = draws.find(d => d.id === drawId)
+        if (draw) {
+            const nextJackpot = (parseFloat(jackpotAmount) + (draw.jackpot_rolled_over || 0)).toFixed(2)
+            await fetch('/api/notify-winner', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: 'draw_published',
+                    drawData: {
+                        month: draw.month,
+                        numbers: draw.winning_numbers,
+                        jackpot: nextJackpot
+                    }
+                })
+            })
+        }
+
         fetchAll()
     }
 
     const markAsPaid = async (winnerId) => {
         await supabase.from('winners').update({ payment_status: 'paid', verified: true }).eq('id', winnerId)
+
+        // Email winner that payment is approved
+        await fetch('/api/notify-winner', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ winnerId, type: 'paid' })
+        })
+
         fetchAll()
     }
 

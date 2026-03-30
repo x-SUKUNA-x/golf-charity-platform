@@ -1,16 +1,15 @@
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
+import { sendEmail } from '@/lib/email'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
 
-// Use service role key here (server-side only, never exposed to browser)
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-// Required: raw body for Stripe signature verification
 export const runtime = 'nodejs'
 
 export async function POST(req) {
@@ -30,7 +29,6 @@ export async function POST(req) {
         const session = event.data.object
         const { userId, plan } = session.metadata
 
-        // Get full subscription to get period end date
         const subscription = await stripe.subscriptions.retrieve(session.subscription)
         const endDate = new Date(subscription.current_period_end * 1000).toISOString()
 
@@ -41,6 +39,12 @@ export async function POST(req) {
             stripe_subscription_id: session.subscription,
             subscription_end_date: endDate,
         }).eq('id', userId)
+
+        // Send welcome email
+        const { data: userData } = await supabase.from('users').select('email').eq('id', userId).single()
+        if (userData?.email) {
+            await sendEmail('welcome', userData.email, { plan })
+        }
 
         console.log(`✅ Subscription activated for user ${userId}`)
     }
@@ -57,12 +61,18 @@ export async function POST(req) {
         console.log(`❌ Subscription cancelled for customer ${subscription.customer}`)
     }
 
-    // ⚠️ Payment failed — mark as lapsed
+    // ⚠️ Payment failed — mark as lapsed + email user
     if (event.type === 'invoice.payment_failed') {
         const invoice = event.data.object
         await supabase.from('users').update({
             subscription_status: 'lapsed',
         }).eq('stripe_customer_id', invoice.customer)
+
+        // Send payment failed email
+        const { data: userData } = await supabase.from('users').select('email').eq('stripe_customer_id', invoice.customer).single()
+        if (userData?.email) {
+            await sendEmail('paymentFailed', userData.email, {})
+        }
 
         console.log(`⚠️ Payment failed for customer ${invoice.customer}`)
     }

@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { useToast, ToastContainer, DashboardSkeleton } from '@/components/Toast'
 
 export default function Dashboard() {
     const router = useRouter()
@@ -23,6 +24,7 @@ export default function Dashboard() {
     const [countdown, setCountdown] = useState({ days: 0, hours: 0, mins: 0 })
     const fileInputRef = useRef(null)
     const paymentSuccess = searchParams.get('payment') === 'success'
+    const { toasts, dismiss, toast } = useToast()
 
     useEffect(() => {
         const getUser = async () => {
@@ -83,8 +85,8 @@ export default function Dashboard() {
     }
 
     const addScore = async () => {
-        if (!newScore || !newDate) { setMessage('Please enter both score and date!'); return }
-        if (newScore < 1 || newScore > 45) { setMessage('Score must be between 1 and 45!'); return }
+        if (!newScore || !newDate) { toast.warning('Please enter both score and date'); return }
+        if (newScore < 1 || newScore > 45) { toast.warning('Score must be between 1 and 45'); return }
         if (scores.length >= 5) {
             const oldest = scores[scores.length - 1]
             await supabase.from('scores').delete().eq('id', oldest.id)
@@ -94,12 +96,11 @@ export default function Dashboard() {
             score: parseInt(newScore),
             played_at: newDate,
         })
-        if (error) { setMessage('Error adding score!'); return }
-        setMessage('Score added! ✓')
+        if (error) { toast.error('Error adding score — please try again'); return }
+        toast.success('Score added successfully!')
         setNewScore('')
         setNewDate('')
         fetchScores(user.id)
-        setTimeout(() => setMessage(''), 3000)
     }
 
     const deleteScore = async (scoreId) => {
@@ -129,7 +130,7 @@ export default function Dashboard() {
             .upload(path, file, { upsert: true })
 
         if (uploadError) {
-            setProofMsg('Upload failed. Please try again.')
+            toast.error('Upload failed — please try again')
             setUploadingFor(null)
             return
         }
@@ -141,7 +142,7 @@ export default function Dashboard() {
             payment_status: 'proof_uploaded'
         }).eq('id', winnerId)
 
-        setProofMsg('Proof submitted ✅ Admin will review your submission.')
+        toast.success('Proof submitted! Admin will review shortly.')
         setUploadingFor(null)
         fetchWins(user.id)
     }
@@ -163,14 +164,11 @@ export default function Dashboard() {
     // Wins needing action (pending proof or awaiting review)
     const actionableWins = wins.filter(w => w.payment_status === 'pending' || w.payment_status === 'proof_uploaded')
 
-    if (loading) return (
-        <main className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center">
-            <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
-        </main>
-    )
+    if (loading) return <DashboardSkeleton />
 
     return (
         <main className="min-h-screen bg-[#0a0a0a] text-white">
+            <ToastContainer toasts={toasts} onDismiss={dismiss} />
             {/* NAVBAR */}
             <nav className="flex justify-between items-center px-8 py-5 border-b border-white/5">
                 <div className="flex items-center gap-2">
@@ -267,9 +265,9 @@ export default function Dashboard() {
                 </div>
 
                 {/* TOP CARDS */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 animate-fade-up stagger">
                     {/* Subscription */}
-                    <div className={`rounded-2xl p-6 border ${
+                    <div className={`card-hover rounded-2xl p-6 border ${
                         profile?.subscription_status === 'active' ? 'bg-green-500/5 border-green-500/20' :
                         profile?.subscription_status === 'lapsed' ? 'bg-red-500/5 border-red-500/20' :
                         'bg-white/[0.03] border-white/[0.06]'}`}>
@@ -332,9 +330,9 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-up">
                     {/* SCORE ENTRY */}
-                    <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-8">
+                    <div className="card-hover bg-white/[0.03] border border-white/[0.06] rounded-2xl p-8">
                         <h3 className="font-semibold mb-1">Enter Score</h3>
                         <p className="text-white/30 text-sm mb-6">Stableford format · 1 to 45 points</p>
 
@@ -347,11 +345,6 @@ export default function Dashboard() {
                             </div>
                         ) : (
                             <>
-                                {message && (
-                                    <div className="bg-white/5 border border-white/10 rounded-xl p-3 mb-4">
-                                        <p className="text-white/60 text-sm">{message}</p>
-                                    </div>
-                                )}
                                 <div className="flex flex-col gap-3">
                                     <input
                                         type="number"

@@ -647,8 +647,6 @@ export default function Admin() {
                         </div>
                     </div>
                 )}
-            </div>
-
                 {/* REPORTS TAB */}
                 {activeTab === 'reports' && (() => {
                     // ── Derived analytics ──────────────────────────

@@ -9,16 +9,18 @@ export default function Dashboard() {
     const searchParams = useSearchParams()
     const [user, setUser] = useState(null)
     const [profile, setProfile] = useState(null)
-    const [scores, setScores] = useState([]
-    )
+    const [scores, setScores] = useState([])
     const [wins, setWins] = useState([])
+    const [draws, setDraws] = useState([])
     const [newScore, setNewScore] = useState('')
     const [newDate, setNewDate] = useState('')
+    const [editingScore, setEditingScore] = useState(null) // { id, score, played_at }
     const [loading, setLoading] = useState(true)
     const [message, setMessage] = useState('')
     const [charity, setCharity] = useState(null)
     const [proofMsg, setProofMsg] = useState('')
     const [uploadingFor, setUploadingFor] = useState(null)
+    const [countdown, setCountdown] = useState({ days: 0, hours: 0, mins: 0 })
     const fileInputRef = useRef(null)
     const paymentSuccess = searchParams.get('payment') === 'success'
 
@@ -30,8 +32,25 @@ export default function Dashboard() {
             fetchProfile(session.user.id)
             fetchScores(session.user.id)
             fetchWins(session.user.id)
+            fetchDraws()
         }
         getUser()
+    }, [])
+
+    // Live countdown to first of next month
+    useEffect(() => {
+        const tick = () => {
+            const now = new Date()
+            const next = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+            const diff = next - now
+            const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+            const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+            const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+            setCountdown({ days, hours, mins })
+        }
+        tick()
+        const id = setInterval(tick, 60000)
+        return () => clearInterval(id)
     }, [])
 
     const fetchProfile = async (userId) => {
@@ -58,6 +77,11 @@ export default function Dashboard() {
         setWins(data || [])
     }
 
+    const fetchDraws = async () => {
+        const { data } = await supabase.from('draws').select('*').eq('status', 'published').order('created_at', { ascending: false }).limit(6)
+        setDraws(data || [])
+    }
+
     const addScore = async () => {
         if (!newScore || !newDate) { setMessage('Please enter both score and date!'); return }
         if (newScore < 1 || newScore > 45) { setMessage('Score must be between 1 and 45!'); return }
@@ -76,6 +100,21 @@ export default function Dashboard() {
         setNewDate('')
         fetchScores(user.id)
         setTimeout(() => setMessage(''), 3000)
+    }
+
+    const deleteScore = async (scoreId) => {
+        await supabase.from('scores').delete().eq('id', scoreId)
+        fetchScores(user.id)
+    }
+
+    const saveEdit = async () => {
+        if (!editingScore) return
+        await supabase.from('scores').update({
+            score: parseInt(editingScore.score),
+            played_at: editingScore.played_at
+        }).eq('id', editingScore.id)
+        setEditingScore(null)
+        fetchScores(user.id)
     }
 
     const uploadProof = async (winnerId, file) => {
@@ -274,14 +313,22 @@ export default function Dashboard() {
                         )}
                     </div>
 
-                    {/* Next Draw */}
+                    {/* Next Draw — live countdown */}
                     <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6">
                         <p className="text-white/40 text-sm mb-3">Next Draw</p>
                         <p className="text-white font-semibold">
                             {new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1)
                                 .toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
                         </p>
-                        <p className="text-white/30 text-sm mt-1">{scores.length}/5 scores entered</p>
+                        <div className="flex gap-3 mt-3">
+                            {[{ v: countdown.days, l: 'd' }, { v: countdown.hours, l: 'h' }, { v: countdown.mins, l: 'm' }].map(({ v, l }) => (
+                                <div key={l} className="bg-white/5 rounded-lg px-2.5 py-1.5 text-center min-w-[40px]">
+                                    <p className="text-white font-bold text-sm">{String(v).padStart(2, '0')}</p>
+                                    <p className="text-white/20 text-xs">{l}</p>
+                                </div>
+                            ))}
+                        </div>
+                        <p className="text-white/20 text-xs mt-3">{scores.length}/5 scores entered</p>
                     </div>
                 </div>
 
@@ -335,7 +382,7 @@ export default function Dashboard() {
                     {/* SCORES LIST */}
                     <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-8">
                         <h3 className="font-semibold mb-1">My Scores</h3>
-                        <p className="text-white/30 text-sm mb-6">Last 5 rounds · most recent first</p>
+                        <p className="text-white/30 text-sm mb-6">Last 5 rounds · click to edit</p>
                         {scores.length === 0 ? (
                             <div className="flex flex-col items-center justify-center h-32 text-center">
                                 <p className="text-white/20 text-sm">No scores yet</p>
@@ -344,12 +391,47 @@ export default function Dashboard() {
                         ) : (
                             <div className="flex flex-col gap-2">
                                 {scores.map((s, i) => (
-                                    <div key={s.id} className="flex justify-between items-center p-4 bg-white/[0.02] rounded-xl border border-white/[0.04]">
-                                        <div className="flex items-center gap-4">
-                                            <span className="text-white/20 text-xs font-mono w-4">{i + 1}</span>
-                                            <span className="text-white font-semibold">{s.score} pts</span>
-                                        </div>
-                                        <span className="text-white/30 text-xs">{s.played_at}</span>
+                                    <div key={s.id}>
+                                        {editingScore?.id === s.id ? (
+                                            <div className="p-3 bg-white/[0.04] rounded-xl border border-white/10 flex flex-col gap-2">
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="number" min="1" max="45"
+                                                        value={editingScore.score}
+                                                        onChange={e => setEditingScore({ ...editingScore, score: e.target.value })}
+                                                        className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-white text-sm w-20 focus:outline-none"
+                                                    />
+                                                    <input
+                                                        type="date"
+                                                        value={editingScore.played_at}
+                                                        onChange={e => setEditingScore({ ...editingScore, played_at: e.target.value })}
+                                                        className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-white text-sm flex-1 focus:outline-none"
+                                                    />
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button onClick={saveEdit} className="bg-white text-black font-semibold px-3 py-1.5 rounded-lg text-xs hover:bg-white/90 transition">Save</button>
+                                                    <button onClick={() => setEditingScore(null)} className="text-white/30 hover:text-white text-xs transition">Cancel</button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="flex justify-between items-center p-4 bg-white/[0.02] rounded-xl border border-white/[0.04] group">
+                                                <div className="flex items-center gap-4">
+                                                    <span className="text-white/20 text-xs font-mono w-4">{i + 1}</span>
+                                                    <span className="text-white font-semibold">{s.score} pts</span>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-white/30 text-xs">{s.played_at}</span>
+                                                    <button
+                                                        onClick={() => setEditingScore({ id: s.id, score: s.score, played_at: s.played_at })}
+                                                        className="text-white/20 hover:text-white text-xs opacity-0 group-hover:opacity-100 transition"
+                                                    >Edit</button>
+                                                    <button
+                                                        onClick={() => deleteScore(s.id)}
+                                                        className="text-red-400/40 hover:text-red-400 text-xs opacity-0 group-hover:opacity-100 transition"
+                                                    >✕</button>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>
@@ -363,7 +445,7 @@ export default function Dashboard() {
 
                         <div className="grid grid-cols-3 gap-4 mb-6">
                             {[
-                                { label: 'Total Wins', value: wins.length > 0 ? wins.length : '0' },
+                                { label: 'Total Wins', value: wins.length || '0' },
                                 { label: 'Total Paid Out', value: totalWon > 0 ? `£${totalWon.toFixed(2)}` : '£0' },
                                 { label: 'Best Match', value: bestMatch },
                             ].map((stat) => (
@@ -400,6 +482,34 @@ export default function Dashboard() {
                             </div>
                         )}
                     </div>
+
+                    {/* DRAW PARTICIPATION */}
+                    {draws.length > 0 && (
+                        <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-8 md:col-span-2">
+                            <h3 className="font-semibold mb-1">Draw Participation</h3>
+                            <p className="text-white/30 text-sm mb-6">Recent published draws — winning numbers</p>
+                            <div className="flex flex-col gap-3">
+                                {draws.map(d => (
+                                    <div key={d.id} className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-white/[0.02] rounded-xl border border-white/[0.04] gap-3">
+                                        <div>
+                                            <p className="text-white text-sm font-semibold">{d.month}</p>
+                                            {d.prize_pool && <p className="text-white/30 text-xs mt-0.5">Prize pool: £{d.prize_pool}</p>}
+                                        </div>
+                                        <div className="flex gap-2">
+                                            {(d.winning_numbers || []).map(n => (
+                                                <span key={n} className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
+                                                    scores.some(s => s.score === n)
+                                                        ? 'bg-green-400 text-black'
+                                                        : 'bg-white/10 text-white/60'
+                                                }`}>{n}</span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <p className="text-white/20 text-xs mt-3">Green numbers = matched one of your scores</p>
+                        </div>
+                    )}
                 </div>
             </div>
         </main>

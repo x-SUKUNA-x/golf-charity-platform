@@ -296,7 +296,7 @@ export default function Admin() {
 
                 {/* TABS */}
                 <div className="flex gap-1 mb-8 bg-white/[0.03] border border-white/[0.06] rounded-xl p-1 w-fit">
-                    {['users', 'draws', 'winners', 'charities'].map((tab) => (
+                    {['users', 'draws', 'winners', 'charities', 'reports'].map((tab) => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
@@ -647,6 +647,173 @@ export default function Admin() {
                         </div>
                     </div>
                 )}
+            </div>
+
+                {/* REPORTS TAB */}
+                {activeTab === 'reports' && (() => {
+                    // ── Derived analytics ──────────────────────────
+                    const activeSubs = users.filter(u => u.subscription_status === 'active')
+                    const totalUsers = users.length
+                    const conversionRate = totalUsers > 0 ? ((activeSubs.length / totalUsers) * 100).toFixed(1) : '0'
+
+                    const monthlyRevenue = activeSubs.filter(u => u.plan === 'monthly').length * MONTHLY_PRICE
+                    const yearlyRevenue = activeSubs.filter(u => u.plan === 'yearly').length * (YEARLY_PRICE / 12)
+                    const totalMonthlyRevenue = monthlyRevenue + yearlyRevenue
+
+                    const totalPaidOut = winners.filter(w => w.payment_status === 'paid').reduce((s, w) => s + (w.amount || 0), 0)
+                    const totalCharityContrib = activeSubs.reduce((s, u) => {
+                        const planPrice = u.plan === 'yearly' ? YEARLY_PRICE / 12 : MONTHLY_PRICE
+                        return s + planPrice * ((u.charity_percent || 10) / 100)
+                    }, 0)
+
+                    // Monthly signups — last 6 months
+                    const now = new Date()
+                    const months = Array.from({ length: 6 }, (_, i) => {
+                        const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1)
+                        return { label: d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }), key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
+                    })
+                    const signupsByMonth = {}
+                    users.forEach(u => {
+                        if (!u.created_at) return
+                        const k = u.created_at.slice(0, 7)
+                        signupsByMonth[k] = (signupsByMonth[k] || 0) + 1
+                    })
+                    const maxSignups = Math.max(1, ...months.map(m => signupsByMonth[m.key] || 0))
+
+                    // Per-charity breakdown
+                    const charityBreakdown = charities.map(c => {
+                        const supporters = users.filter(u => u.charity_id === c.id && u.subscription_status === 'active')
+                        const estContrib = supporters.reduce((s, u) => {
+                            const price = u.plan === 'yearly' ? YEARLY_PRICE / 12 : MONTHLY_PRICE
+                            return s + price * ((u.charity_percent || 10) / 100)
+                        }, 0)
+                        return { name: c.name, supporters: supporters.length, estContrib }
+                    }).sort((a, b) => b.supporters - a.supporters)
+
+                    // Draw stats
+                    const totalRollovers = draws.reduce((s, d) => s + (d.jackpot_rolled_over || 0), 0)
+                    const totalWinnersFound = winners.length
+                    const totalWinnersPaid = winners.filter(w => w.payment_status === 'paid').length
+
+                    // CSV export
+                    const exportCSV = () => {
+                        const rows = [
+                            ['Email', 'Plan', 'Status', 'Charity %', 'Renewal Date'],
+                            ...users.map(u => [
+                                u.email || '',
+                                u.plan || 'none',
+                                u.subscription_status || 'inactive',
+                                u.charity_percent || 10,
+                                u.subscription_end_date ? new Date(u.subscription_end_date).toLocaleDateString('en-GB') : ''
+                            ])
+                        ]
+                        const csv = rows.map(r => r.join(',')).join('\n')
+                        const blob = new Blob([csv], { type: 'text/csv' })
+                        const url = URL.createObjectURL(blob)
+                        const a = document.createElement('a')
+                        a.href = url
+                        a.download = `golfgives-users-${new Date().toISOString().slice(0, 10)}.csv`
+                        a.click()
+                        URL.revokeObjectURL(url)
+                    }
+
+                    return (
+                        <div>
+                            <div className="flex justify-between items-center mb-8">
+                                <div>
+                                    <h2 className="font-semibold">Analytics & Reports</h2>
+                                    <p className="text-white/40 text-sm mt-1">Platform overview and performance metrics</p>
+                                </div>
+                                <button
+                                    onClick={exportCSV}
+                                    className="bg-white/5 border border-white/10 text-white/60 hover:text-white text-sm font-medium px-4 py-2 rounded-xl transition"
+                                >
+                                    ↓ Export Users CSV
+                                </button>
+                            </div>
+
+                            {/* KEY METRICS */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+                                {[
+                                    { label: 'Monthly Revenue', value: `£${totalMonthlyRevenue.toFixed(2)}`, sub: 'from active subs', color: 'text-green-400' },
+                                    { label: 'Total Paid Out', value: `£${totalPaidOut.toFixed(2)}`, sub: 'to winners all-time', color: 'text-yellow-400' },
+                                    { label: 'Charity Contributions', value: `£${totalCharityContrib.toFixed(2)}`, sub: 'estimated this month', color: 'text-blue-400' },
+                                    { label: 'Conversion Rate', value: `${conversionRate}%`, sub: `${activeSubs.length} of ${totalUsers} users`, color: 'text-purple-400' },
+                                ].map(s => (
+                                    <div key={s.label} className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6">
+                                        <p className={`text-3xl font-black ${s.color}`}>{s.value}</p>
+                                        <p className="text-white/40 text-sm mt-2">{s.label}</p>
+                                        <p className="text-white/20 text-xs mt-1">{s.sub}</p>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* MONTHLY SIGNUPS CHART */}
+                            <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6 mb-6">
+                                <h3 className="font-semibold mb-6">Monthly Signups</h3>
+                                <div className="flex items-end gap-3 h-32">
+                                    {months.map(m => {
+                                        const count = signupsByMonth[m.key] || 0
+                                        const pct = Math.round((count / maxSignups) * 100)
+                                        return (
+                                            <div key={m.key} className="flex-1 flex flex-col items-center gap-2">
+                                                <span className="text-white/50 text-xs font-medium">{count}</span>
+                                                <div className="w-full bg-white/5 rounded-t-lg relative" style={{ height: '80px' }}>
+                                                    <div
+                                                        className="absolute bottom-0 left-0 right-0 bg-white/20 rounded-t-lg transition-all"
+                                                        style={{ height: `${Math.max(pct, 4)}%` }}
+                                                    />
+                                                </div>
+                                                <span className="text-white/30 text-xs">{m.label}</span>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* DRAW STATS + CHARITY BREAKDOWN side by side */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                                {/* Draw stats */}
+                                <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6">
+                                    <h3 className="font-semibold mb-5">Draw Statistics</h3>
+                                    <div className="flex flex-col gap-3">
+                                        {[
+                                            { label: 'Total Draws Run', value: draws.length },
+                                            { label: 'Winners Found', value: totalWinnersFound },
+                                            { label: 'Winners Paid', value: totalWinnersPaid },
+                                            { label: 'Total Jackpot Rollovers', value: `£${totalRollovers.toFixed(2)}` },
+                                        ].map(s => (
+                                            <div key={s.label} className="flex justify-between items-center py-2 border-b border-white/[0.04]">
+                                                <span className="text-white/40 text-sm">{s.label}</span>
+                                                <span className="text-white font-semibold text-sm">{s.value}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Per-charity breakdown */}
+                                <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6">
+                                    <h3 className="font-semibold mb-5">Charity Contributions</h3>
+                                    {charityBreakdown.length === 0 ? (
+                                        <p className="text-white/20 text-sm">No charities yet.</p>
+                                    ) : (
+                                        <div className="flex flex-col gap-3">
+                                            {charityBreakdown.map(c => (
+                                                <div key={c.name} className="flex justify-between items-center py-2 border-b border-white/[0.04]">
+                                                    <div>
+                                                        <p className="text-white text-sm font-medium">{c.name}</p>
+                                                        <p className="text-white/30 text-xs">{c.supporters} supporter{c.supporters !== 1 ? 's' : ''}</p>
+                                                    </div>
+                                                    <span className="text-blue-400 font-semibold text-sm">~£{c.estContrib.toFixed(2)}/mo</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )
+                })()}
             </div>
         </main>
     )

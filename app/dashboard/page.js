@@ -39,6 +39,59 @@ function DashboardContent() {
         getUser()
     }, [])
 
+    // Auto-activate subscription after successful payment (fallback if webhook is slow/missed)
+    useEffect(() => {
+        if (!paymentSuccess || !user) return
+
+        let attempts = 0
+        const maxAttempts = 5
+
+        const tryActivate = async () => {
+            attempts++
+            try {
+                // Re-fetch fresh profile directly — don't rely on stale state
+                const { data: freshProfile } = await supabase
+                    .from('users')
+                    .select('subscription_status, plan')
+                    .eq('id', user.id)
+                    .single()
+
+                if (freshProfile?.subscription_status === 'active') {
+                    // Webhook already handled it — just refresh UI
+                    fetchProfile(user.id)
+                    toast.success('Subscription activated! Welcome to GolfGives 🎉')
+                    return
+                }
+
+                // Webhook hasn't fired yet — use fallback activation
+                const res = await fetch('/api/activate-subscription', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userId: user.id,
+                        plan: freshProfile?.plan || 'monthly'
+                    })
+                })
+
+                if (res.ok) {
+                    fetchProfile(user.id)
+                    toast.success('Subscription activated! Welcome to GolfGives 🎉')
+                } else if (attempts < maxAttempts) {
+                    setTimeout(tryActivate, 2000)
+                }
+            } catch (err) {
+                console.error('Activation attempt failed:', err)
+                if (attempts < maxAttempts) {
+                    setTimeout(tryActivate, 2000)
+                }
+            }
+        }
+
+        // Small initial delay to allow webhook to arrive first
+        const timer = setTimeout(tryActivate, 1500)
+        return () => clearTimeout(timer)
+    }, [paymentSuccess, user])
+
     // Live countdown to first of next month
     useEffect(() => {
         const tick = () => {

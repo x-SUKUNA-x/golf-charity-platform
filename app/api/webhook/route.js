@@ -12,6 +12,23 @@ const supabase = createClient(
 
 export const runtime = 'nodejs'
 
+// Helper: find user by Stripe customer email
+async function findUserByStripeCustomer(customerId) {
+    try {
+        const customer = await stripe.customers.retrieve(customerId)
+        if (!customer || customer.deleted || !customer.email) return null
+        const { data } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', customer.email)
+            .single()
+        return data || null
+    } catch (err) {
+        console.error('Error finding user by customer:', err.message)
+        return null
+    }
+}
+
 export async function POST(req) {
     const body = await req.text()
     const sig = req.headers.get('stripe-signature')
@@ -27,67 +44,86 @@ export async function POST(req) {
     // ✅ Payment succeeded — subscription activated
     if (event.type === 'checkout.session.completed') {
         const session = event.data.object
-        const { userId, plan } = session.metadata
+        const { userId, plan } = session.metadata || {}
 
-        const subscription = await stripe.subscriptions.retrieve(session.subscription)
-        const endDate = new Date(subscription.current_period_end * 1000).toISOString()
-
-        await supabase.from('users').update({
-            subscription_status: 'active',
-            plan,
-            stripe_customer_id: session.customer,
-            stripe_subscription_id: session.subscription,
-            subscription_end_date: endDate,
-        }).eq('id', userId)
-
-        // Send welcome email
-        const { data: userData } = await supabase.from('users').select('email').eq('id', userId).single()
-        if (userData?.email) {
-            await sendEmail('welcome', userData.email, { plan })
+        if (!userId) {
+            console.error('No userId in session metadata')
+            return NextResponse.json({ received: true })
         }
 
-        console.log(`✅ Subscription activated for user ${userId}`)
+        // Only update columns that exist in the users table
+        const { error } = await supabase
+            .from('users')
+            .update({
+                subscription_status: 'active',
+                plan: plan || 'monthly',
+            })
+            .eq('id', userId)
+
+        if (error) {
+            console.error('Error activating subscription:', error.message)
+        } else {
+            console.log(`✅ Subscription activated for user ${userId}, plan: ${plan}`)
+        }
+
+        // Send welcome email
+        const { data: userData } = await supabase
+            .from('users')
+            .select('email')
+            .eq('id', userId)
+            .single()
+
+        if (userData?.email) {
+            await sendEmail('welcome', userData.email, { plan }).catch(e =>
+                console.error('Welcome email error:', e.message)
+            )
+        }
     }
 
     // ❌ Subscription cancelled
     if (event.type === 'customer.subscription.deleted') {
         const subscription = event.data.object
-        await supabase.from('users').update({
-            subscription_status: 'inactive',
-            stripe_subscription_id: null,
-            subscription_end_date: null,
-        }).eq('stripe_customer_id', subscription.customer)
+        const userData = await findUserByStripeCustomer(subscription.customer)
 
-        console.log(`❌ Subscription cancelled for customer ${subscription.customer}`)
+        if (userData) {
+            await supabase
+                .from('users')
+                .update({ subscription_status: 'inactive' })
+                .eq('id', userData.id)
+            console.log(`❌ Subscription cancelled for user ${userData.email}`)
+        }
     }
 
     // ⚠️ Payment failed — mark as lapsed + email user
     if (event.type === 'invoice.payment_failed') {
         const invoice = event.data.object
-        await supabase.from('users').update({
-            subscription_status: 'lapsed',
-        }).eq('stripe_customer_id', invoice.customer)
+        const userData = await findUserByStripeCustomer(invoice.customer)
 
-        // Send payment failed email
-        const { data: userData } = await supabase.from('users').select('email').eq('stripe_customer_id', invoice.customer).single()
-        if (userData?.email) {
-            await sendEmail('paymentFailed', userData.email, {})
+        if (userData) {
+            await supabase
+                .from('users')
+                .update({ subscription_status: 'lapsed' })
+                .eq('id', userData.id)
+
+            await sendEmail('paymentFailed', userData.email, {}).catch(e =>
+                console.error('Payment failed email error:', e.message)
+            )
+            console.log(`⚠️ Payment failed for user ${userData.email}`)
         }
-
-        console.log(`⚠️ Payment failed for customer ${invoice.customer}`)
     }
 
-    // 🔄 Subscription renewed — update end date
+    // 🔄 Subscription renewed — keep active
     if (event.type === 'invoice.payment_succeeded') {
         const invoice = event.data.object
         if (invoice.subscription) {
-            const subscription = await stripe.subscriptions.retrieve(invoice.subscription)
-            const endDate = new Date(subscription.current_period_end * 1000).toISOString()
-
-            await supabase.from('users').update({
-                subscription_status: 'active',
-                subscription_end_date: endDate,
-            }).eq('stripe_customer_id', invoice.customer)
+            const userData = await findUserByStripeCustomer(invoice.customer)
+            if (userData) {
+                await supabase
+                    .from('users')
+                    .update({ subscription_status: 'active' })
+                    .eq('id', userData.id)
+                console.log(`🔄 Subscription renewed for user ${userData.email}`)
+            }
         }
     }
 

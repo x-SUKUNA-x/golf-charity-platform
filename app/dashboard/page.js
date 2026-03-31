@@ -1,11 +1,11 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, Suspense } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useToast, ToastContainer, DashboardSkeleton } from '@/components/Toast'
 
-export default function Dashboard() {
+function DashboardContent() {
     const router = useRouter()
     const searchParams = useSearchParams()
     const [user, setUser] = useState(null)
@@ -506,5 +506,14 @@ export default function Dashboard() {
                 </div>
             </div>
         </main>
+    )
+}
+
+
+export default function Dashboard() {
+    return (
+        <Suspense fallback={<DashboardSkeleton />}>
+            <DashboardContent />
+        </Suspense>
     )
 }

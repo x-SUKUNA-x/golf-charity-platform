@@ -1,10 +1,10 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
 
-export default function Subscribe() {
+function SubscribeContent() {
     const router = useRouter()
     const searchParams = useSearchParams()
     const { user, loading: authLoading } = useAuthGuard()
@@ -190,5 +190,18 @@ export default function Subscribe() {
                 </div>
             </div>
         </main>
+    )
+}
+
+
+export default function Subscribe() {
+    return (
+        <Suspense fallback={
+            <main className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center">
+                <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+            </main>
+        }>
+            <SubscribeContent />
+        </Suspense>
     )
 }

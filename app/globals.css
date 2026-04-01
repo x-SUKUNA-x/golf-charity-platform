@@ -3,6 +3,9 @@
 /* ─── Fonts ─────────────────────────────────────────────────────────────── */
 :root {
     --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --accent: #e8a020;
+    --accent-light: #f5b942;
+    --accent-glow: rgba(232, 160, 32, 0.15);
 }
 
 body {
@@ -13,9 +16,9 @@ body {
     -moz-osx-font-smoothing: grayscale;
 }
 
-/* ─── Micro-animations ──────────────────────────────────────────────────── */
+/* ─── Keyframes ─────────────────────────────────────────────────────────── */
 @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(12px); }
+    from { opacity: 0; transform: translateY(24px); }
     to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes fadeIn {
@@ -30,40 +33,121 @@ body {
     to { transform: rotate(360deg); }
 }
 @keyframes pulse-glow {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.1); }
-    50%       { box-shadow: 0 0 0 8px rgba(255,255,255,0); }
+    0%, 100% { box-shadow: 0 0 0 0 rgba(232,160,32,0.3); }
+    50%       { box-shadow: 0 0 0 12px rgba(232,160,32,0); }
 }
 @keyframes toast-in {
     from { opacity: 0; transform: translateY(12px) scale(0.96); }
     to   { opacity: 1; transform: translateY(0) scale(1); }
 }
-
-/* ─── Utility animation classes ─────────────────────────────────────────── */
-.animate-fade-up    { animation: fadeUp 0.4s ease both; }
-.animate-fade-in    { animation: fadeIn 0.3s ease both; }
-.animate-slide-down { animation: slideDown 0.3s ease both; }
-.animate-toast-in   { animation: toast-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
-
-/* Staggered children */
-.stagger > *:nth-child(1) { animation-delay: 0.05s; }
-.stagger > *:nth-child(2) { animation-delay: 0.10s; }
-.stagger > *:nth-child(3) { animation-delay: 0.15s; }
-.stagger > *:nth-child(4) { animation-delay: 0.20s; }
-
-/* ─── Card hover lift ────────────────────────────────────────────────────── */
-.card-hover {
-    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-}
-.card-hover:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-}
-
-/* ─── Skeleton shimmer ──────────────────────────────────────────────────── */
 @keyframes shimmer {
     0%   { background-position: -400px 0; }
     100% { background-position: 400px 0; }
 }
+@keyframes ticker {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+}
+@keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50%       { transform: translateY(-8px); }
+}
+@keyframes glow-pulse {
+    0%, 100% { opacity: 0.6; }
+    50%       { opacity: 1; }
+}
+@keyframes scale-in {
+    from { opacity: 0; transform: scale(0.92); }
+    to   { opacity: 1; transform: scale(1); }
+}
+@keyframes count-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Utility animation classes ─────────────────────────────────────────── */
+.animate-fade-up     { animation: fadeUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-fade-in     { animation: fadeIn 0.4s ease both; }
+.animate-slide-down  { animation: slideDown 0.3s ease both; }
+.animate-toast-in    { animation: toast-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.animate-scale-in    { animation: scale-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-float       { animation: float 4s ease-in-out infinite; }
+.animate-glow-pulse  { animation: glow-pulse 2s ease-in-out infinite; }
+.animate-ticker      { animation: ticker 28s linear infinite; }
+.animate-pulse-glow  { animation: pulse-glow 2s ease-in-out infinite; }
+
+/* Staggered children */
+.stagger > *:nth-child(1) { animation-delay: 0.05s; }
+.stagger > *:nth-child(2) { animation-delay: 0.15s; }
+.stagger > *:nth-child(3) { animation-delay: 0.25s; }
+.stagger > *:nth-child(4) { animation-delay: 0.35s; }
+.stagger > *:nth-child(5) { animation-delay: 0.45s; }
+
+/* ─── Scroll reveal ──────────────────────────────────────────────────────── */
+.reveal {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+                transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+.reveal-delay-1 { transition-delay: 0.1s; }
+.reveal-delay-2 { transition-delay: 0.2s; }
+.reveal-delay-3 { transition-delay: 0.3s; }
+.reveal-delay-4 { transition-delay: 0.4s; }
+
+/* ─── Card hover lift ────────────────────────────────────────────────────── */
+.card-hover {
+    transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+                box-shadow 0.25s ease,
+                border-color 0.25s ease !important;
+}
+.card-hover:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    border-color: rgba(255,255,255,0.12) !important;
+}
+
+/* ─── Accent glow card ──────────────────────────────────────────────────── */
+.accent-card-hover {
+    transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+                box-shadow 0.25s ease,
+                border-color 0.25s ease !important;
+}
+.accent-card-hover:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 40px var(--accent-glow);
+    border-color: rgba(232,160,32,0.3) !important;
+}
+
+/* ─── CTA button ─────────────────────────────────────────────────────────── */
+.btn-cta {
+    background: var(--accent);
+    color: #000;
+    transition: background 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease !important;
+}
+.btn-cta:hover {
+    background: var(--accent-light);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 32px rgba(232,160,32,0.4);
+}
+.btn-cta:active {
+    transform: translateY(0);
+}
+
+/* ─── Ghost button ───────────────────────────────────────────────────────── */
+.btn-ghost {
+    transition: color 0.2s ease, background 0.2s ease !important;
+}
+.btn-ghost:hover {
+    color: #fff;
+    background: rgba(255,255,255,0.06);
+}
+
+/* ─── Skeleton shimmer ──────────────────────────────────────────────────── */
 .skeleton {
     background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
     background-size: 800px 100%;
@@ -117,7 +201,16 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     transition-duration: 150ms;
     transition-timing-function: ease;
 }
-/* Don't transition layout properties globally */
 *:not(input):not(textarea) {
     box-sizing: border-box;
+}
+
+/* ─── Noise texture overlay ─────────────────────────────────────────────── */
+.noise::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    border-radius: inherit;
 }

@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
+import { supabase } from '@/lib/supabase'
 
 /* ─── Scroll reveal ──────────────────────────────────────────────────────── */
 function useReveal() {
@@ -172,6 +173,57 @@ function ImpactTicker() {
 
 /* ─── Impact section ─────────────────────────────────────────────────────── */
 function ImpactSection() {
+    const [stats, setStats] = useState({ donated: '£0', charities: '0', members: '0' })
+
+    useEffect(() => {
+        const fetchStats = async () => {
+            try {
+                // Total paid out to winners (charity contribution estimate = 10% of revenue)
+                const { data: winnersData } = await supabase
+                    .from('winners')
+                    .select('amount')
+                    .eq('payment_status', 'paid')
+                const totalPaid = (winnersData || []).reduce((s, w) => s + (w.amount || 0), 0)
+
+                // Active subscribers count → estimate charity contributions
+                const { data: usersData } = await supabase
+                    .from('users')
+                    .select('subscription_status, plan, charity_percent')
+                    .eq('subscription_status', 'active')
+                const MONTHLY = 9.99, YEARLY = 99.99
+                const charityContrib = (usersData || []).reduce((s, u) => {
+                    const price = u.plan === 'yearly' ? YEARLY / 12 : MONTHLY
+                    return s + price * ((u.charity_percent || 10) / 100)
+                }, 0)
+                const totalDonated = totalPaid * 0 + charityContrib // monthly estimate
+
+                // Charity count
+                const { count: charityCount } = await supabase
+                    .from('charities')
+                    .select('id', { count: 'exact', head: true })
+
+                // Total members (all users)
+                const { count: memberCount } = await supabase
+                    .from('users')
+                    .select('id', { count: 'exact', head: true })
+
+                const fmt = (n) => {
+                    if (n >= 1000) return `£${(n / 1000).toFixed(1)}K+`
+                    return `£${Math.floor(n)}`
+                }
+
+                setStats({
+                    donated: charityContrib > 0 ? fmt(charityContrib) : '£0',
+                    charities: String(charityCount || 0),
+                    members: memberCount >= 1000 ? `${Math.floor(memberCount / 100) * 100}+` : String(memberCount || 0),
+                })
+            } catch (e) {
+                // Silently fall back to defaults on error
+            }
+        }
+        fetchStats()
+    }, [])
+
     return (
         <section className="px-6 py-24" style={{ background: 'var(--bg)' }}>
             <div className="max-w-5xl mx-auto">
@@ -187,12 +239,12 @@ function ImpactSection() {
                     A minimum of 10% of every subscription goes straight to the charity you choose. No ifs, no buts.
                 </p>
 
-                {/* Stat cards */}
+                {/* Stat cards — now using live data */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                     {[
-                        { value: '£40K+', label: 'Donated to charities', sub: 'since launch', color: 'var(--accent)' },
-                        { value: '12', label: 'Charity partners', sub: 'and growing', color: '#10b981' },
-                        { value: '2400+', label: 'Lives touched', sub: 'through member giving', color: '#6366f1' },
+                        { value: stats.donated, label: 'Donated to charities', sub: 'this month (est.)', color: 'var(--accent)' },
+                        { value: stats.charities, label: 'Charity partners', sub: 'and growing', color: '#10b981' },
+                        { value: stats.members, label: 'Members', sub: 'and giving back', color: '#6366f1' },
                     ].map((s, i) => (
                         <div key={s.label}
                             className={`reveal reveal-delay-${i+1} accent-card-hover rounded-2xl p-8 border`}

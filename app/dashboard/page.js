@@ -11,6 +11,7 @@ function DashboardContent() {
     const searchParams = useSearchParams()
     const [user, setUser] = useState(null)
     const [profile, setProfile] = useState(null)
+    const [isAdmin, setIsAdmin] = useState(false)
     const [scores, setScores] = useState([])
     const [wins, setWins] = useState([])
     const [draws, setDraws] = useState([])
@@ -30,6 +31,9 @@ function DashboardContent() {
             const { data: { session } } = await supabase.auth.getSession()
             if (!session) { router.push('/login'); return }
             setUser(session.user)
+            // BUG FIX #6: Check is_admin flag to conditionally show Admin link
+            const { data: adminCheck } = await supabase.from('users').select('is_admin').eq('id', session.user.id).single()
+            setIsAdmin(adminCheck?.is_admin === true)
             fetchProfile(session.user.id)
             fetchScores(session.user.id)
             fetchWins(session.user.id)
@@ -176,7 +180,9 @@ function DashboardContent() {
                 style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
                 <NavLogo />
                 <div className="flex items-center gap-5">
-                    <Link href="/admin" className="text-sm transition" style={{ color: 'var(--text-3)' }}>Admin</Link>
+                    {isAdmin && (
+                        <Link href="/admin" className="text-sm transition" style={{ color: 'var(--text-3)' }}>Admin</Link>
+                    )}
                     <span className="text-sm" style={{ color: 'var(--text-3)' }}>{user?.email}</span>
                     <button onClick={handleLogout} className="text-sm transition" style={{ color: 'var(--text-3)' }}>Sign out</button>
                 </div>

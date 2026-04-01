@@ -23,6 +23,11 @@ export default function Admin() {
     const [simulationResult, setSimulationResult] = useState(null)
     const [drawRunning, setDrawRunning] = useState(false)
     const [drawMsg, setDrawMsg] = useState('')
+    // Score editing state
+    const [editingUserScores, setEditingUserScores] = useState(null) // userId
+    const [userScores, setUserScores] = useState([]) // scores for editing user
+    const [scoreEditMsg, setScoreEditMsg] = useState('')
+    const [editingScore, setEditingScore] = useState(null)
 
     useEffect(() => {
         if (!authLoading && adminUser) fetchAll()
@@ -92,8 +97,17 @@ export default function Admin() {
     const confirmDraw = async () => {
         if (!simulationResult) return
         setDrawRunning(true)
-        const numbers = simulationResult
+
+        // BUG FIX #3: Guard against running multiple draws in the same month
         const month = new Date().toISOString().slice(0, 7)
+        const alreadyRan = draws.find(d => d.month === month)
+        if (alreadyRan) {
+            setDrawMsg(`⚠️ A draw has already been run for ${month}. You cannot run two draws in the same month.`)
+            setDrawRunning(false)
+            return
+        }
+
+        const numbers = simulationResult
         const prevJackpotRollover = draws.find(d => d.status === 'published' && d.jackpot_rolled_over > 0)?.jackpot_rolled_over || 0
         const totalJackpot = parseFloat(jackpotAmount) + prevJackpotRollover
         const { data: draw } = await supabase.from('draws').insert({
@@ -104,26 +118,45 @@ export default function Admin() {
         if (draw) {
             const activeSubs = users.filter(u => u.subscription_status === 'active').map(u => u.id)
             const { data: allScores } = await supabase.from('scores').select('user_id, score')
-            const userScores = {}
+
+            // Group scores per user (deduplicated — BUG FIX #2)
+            const userScoresMap = {}
             allScores?.forEach(s => {
                 if (activeSubs.includes(s.user_id)) {
-                    if (!userScores[s.user_id]) userScores[s.user_id] = []
-                    userScores[s.user_id].push(s.score)
+                    if (!userScoresMap[s.user_id]) userScoresMap[s.user_id] = new Set()
+                    userScoresMap[s.user_id].add(s.score)
                 }
             })
-            for (const [userId, scores] of Object.entries(userScores)) {
-                const matches = scores.filter(s => numbers.includes(s)).length
-                let tier = null, amount = 0
-                if (matches >= 5) { tier = '5-match'; amount = totalJackpot; jackpotWon = true }
-                else if (matches >= 4) { tier = '4-match'; amount = parseFloat(majorAmount) }
-                else if (matches >= 3) { tier = '3-match'; amount = parseFloat(prizeAmount) }
-                if (tier) {
-                    const { data: newWinner } = await supabase.from('winners').insert({ user_id: userId, draw_id: draw.id, tier, amount, payment_status: 'pending' }).select().single()
+
+            // Identify winners by tier and count per tier for prize splitting (BUG FIX #1)
+            const tierWinners = { '5-match': [], '4-match': [], '3-match': [] }
+            for (const [userId, scoresSet] of Object.entries(userScoresMap)) {
+                const matches = [...scoresSet].filter(s => numbers.includes(s)).length
+                if (matches >= 5) { tierWinners['5-match'].push(userId); jackpotWon = true }
+                else if (matches >= 4) tierWinners['4-match'].push(userId)
+                else if (matches >= 3) tierWinners['3-match'].push(userId)
+            }
+
+            // Calculate split amounts per tier
+            const tierAmounts = {
+                '5-match': jackpotWon ? (totalJackpot / tierWinners['5-match'].length) : 0,
+                '4-match': tierWinners['4-match'].length > 0 ? (parseFloat(majorAmount) / tierWinners['4-match'].length) : 0,
+                '3-match': tierWinners['3-match'].length > 0 ? (parseFloat(prizeAmount) / tierWinners['3-match'].length) : 0,
+            }
+
+            // Insert winners with split amounts
+            for (const tier of ['5-match', '4-match', '3-match']) {
+                for (const userId of tierWinners[tier]) {
+                    const amount = parseFloat(tierAmounts[tier].toFixed(2))
+                    const { data: newWinner } = await supabase.from('winners').insert({
+                        user_id: userId, draw_id: draw.id, tier, amount, payment_status: 'pending'
+                    }).select().single()
                     if (newWinner?.id) {
                         await fetch('/api/notify-winner', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ winnerId: newWinner.id, type: 'won' }) })
                     }
                 }
             }
+
             if (!jackpotWon) await supabase.from('draws').update({ jackpot_rolled_over: totalJackpot }).eq('id', draw.id)
         }
         setSimulationResult(null)
@@ -150,6 +183,41 @@ export default function Admin() {
         await supabase.from('winners').update({ payment_status: 'rejected', verified: false }).eq('id', winnerId)
         fetchAll()
     }
+    // BUG FIX #5: Admin score editing functions
+    const openUserScores = async (userId) => {
+        setScoreEditMsg('')
+        setEditingScore(null)
+        const { data } = await supabase.from('scores').select('*').eq('user_id', userId).order('played_at', { ascending: false })
+        setUserScores(data || [])
+        setEditingUserScores(userId)
+    }
+    const saveAdminScoreEdit = async () => {
+        if (!editingScore) return
+        if (editingScore.score < 1 || editingScore.score > 45) { setScoreEditMsg('Score must be between 1 and 45'); return }
+        await supabase.from('scores').update({ score: parseInt(editingScore.score), played_at: editingScore.played_at }).eq('id', editingScore.id)
+        setEditingScore(null)
+        openUserScores(editingUserScores)
+        setScoreEditMsg('Score updated!')
+    }
+    const deleteAdminScore = async (scoreId) => {
+        await supabase.from('scores').delete().eq('id', scoreId)
+        openUserScores(editingUserScores)
+    }
+    const addAdminScore = async (userId) => {
+        const score = parseInt(prompt('Enter Stableford score (1–45):'))
+        if (!score || score < 1 || score > 45) { setScoreEditMsg('Invalid score — must be 1 to 45'); return }
+        const date = prompt('Enter date (YYYY-MM-DD):', new Date().toISOString().slice(0, 10))
+        if (!date) return
+        // Rolling 5-score logic
+        if (userScores.length >= 5) {
+            const oldest = userScores[userScores.length - 1]
+            await supabase.from('scores').delete().eq('id', oldest.id)
+        }
+        await supabase.from('scores').insert({ user_id: userId, score, played_at: date })
+        openUserScores(userId)
+        setScoreEditMsg('Score added!')
+    }
+
     const addCharity = async () => {
         if (!newCharity.name) { setCharityMsg('Please enter charity name!'); return }
         await supabase.from('charities').insert({ name: newCharity.name, description: newCharity.description, category: newCharity.category || null, is_featured: newCharity.is_featured || false })
@@ -228,10 +296,56 @@ export default function Admin() {
                         <div className="p-6 border-b" style={{ borderColor: 'var(--border)' }}>
                             <h2 className="font-semibold" style={{ color: 'var(--text)' }}>All Users</h2>
                         </div>
+                        {/* Score Edit Modal (BUG FIX #5) */}
+                        {editingUserScores && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.4)' }}>
+                                <div className="w-full max-w-md rounded-2xl border p-6" style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+                                    <div className="flex justify-between items-center mb-4">
+                                        <h3 className="font-semibold" style={{ color: 'var(--text)' }}>Edit Scores</h3>
+                                        <button onClick={() => { setEditingUserScores(null); setEditingScore(null); setScoreEditMsg('') }}
+                                            className="text-sm" style={{ color: 'var(--text-3)' }}>✕ Close</button>
+                                    </div>
+                                    {scoreEditMsg && <p className="text-sm text-green-600 mb-3">{scoreEditMsg}</p>}
+                                    <div className="flex flex-col gap-2 mb-4">
+                                        {userScores.length === 0 && <p className="text-sm" style={{ color: 'var(--text-3)' }}>No scores yet.</p>}
+                                        {userScores.map((s) => (
+                                            <div key={s.id}>
+                                                {editingScore?.id === s.id ? (
+                                                    <div className="flex gap-2 p-3 rounded-xl border" style={{ background: 'var(--bg)', borderColor: 'var(--border)' }}>
+                                                        <input type="number" min="1" max="45" value={editingScore.score}
+                                                            onChange={e => setEditingScore({ ...editingScore, score: e.target.value })}
+                                                            className="w-20 rounded-lg px-3 py-2 text-sm border" style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text)' }} />
+                                                        <input type="date" value={editingScore.played_at}
+                                                            onChange={e => setEditingScore({ ...editingScore, played_at: e.target.value })}
+                                                            className="flex-1 rounded-lg px-3 py-2 text-sm border" style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text)' }} />
+                                                        <button onClick={saveAdminScoreEdit} className="btn-cta px-3 py-1.5 rounded-lg text-xs">Save</button>
+                                                        <button onClick={() => setEditingScore(null)} className="text-xs" style={{ color: 'var(--text-3)' }}>Cancel</button>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex justify-between items-center px-4 py-3 rounded-xl border" style={{ background: 'var(--bg)', borderColor: 'var(--border)' }}>
+                                                        <span className="font-semibold text-sm" style={{ color: 'var(--text)' }}>{s.score} pts</span>
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-xs" style={{ color: 'var(--text-3)' }}>{s.played_at}</span>
+                                                            <button onClick={() => setEditingScore({ id: s.id, score: s.score, played_at: s.played_at })} className="text-xs" style={{ color: 'var(--text-2)' }}>Edit</button>
+                                                            <button onClick={() => deleteAdminScore(s.id)} className="text-xs text-red-500">✕</button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <button onClick={() => addAdminScore(editingUserScores)}
+                                        className="w-full py-2.5 rounded-xl text-sm border transition"
+                                        style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text)' }}>
+                                        + Add Score
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                         <table className="w-full">
                             <thead>
                                 <tr className="border-b" style={{ borderColor: 'var(--border)' }}>
-                                    {['Email', 'Plan', 'Status', 'Charity %', 'Renewal'].map(h => (
+                                    {['Email', 'Plan', 'Status', 'Charity %', 'Renewal', 'Scores'].map(h => (
                                         <th key={h} className="text-left p-4 text-sm font-normal" style={{ color: 'var(--text-3)' }}>{h}</th>
                                     ))}
                                 </tr>
@@ -254,6 +368,13 @@ export default function Admin() {
                                         <td className="p-4 text-sm" style={{ color: 'var(--text-2)' }}>{u.charity_percent || 10}%</td>
                                         <td className="p-4 text-sm" style={{ color: 'var(--text-3)' }}>
                                             {u.subscription_end_date ? new Date(u.subscription_end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                                        </td>
+                                        <td className="p-4">
+                                            <button onClick={() => openUserScores(u.id)}
+                                                className="text-xs font-medium px-3 py-1.5 rounded-xl border transition"
+                                                style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text-2)' }}>
+                                                Edit Scores
+                                            </button>
                                         </td>
                                     </tr>
                                 ))}
@@ -284,6 +405,12 @@ export default function Admin() {
                         <div className="rounded-2xl p-6 mb-6 border" style={card}>
                             <h2 className="font-semibold mb-1" style={{ color: 'var(--text)' }}>Draw Engine</h2>
                             <p className="text-sm mb-6" style={{ color: 'var(--text-2)' }}>Simulate first, then confirm to run the official draw.</p>
+                            {/* BUG FIX #3: Show warning if draw already run this month */}
+                            {draws.find(d => d.month === new Date().toISOString().slice(0, 7)) && (
+                                <div className="rounded-xl p-4 mb-4 text-sm border bg-yellow-50 border-yellow-200 text-yellow-800">
+                                    ⚠️ A draw has already been run for {new Date().toISOString().slice(0, 7)}. Running another draw this month is not allowed.
+                                </div>
+                            )}
                             <div className="flex gap-2 mb-6">
                                 {['random', 'algorithmic'].map(mode => (
                                     <button key={mode} onClick={() => setDrawMode(mode)}

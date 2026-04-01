@@ -50,10 +50,23 @@ export default function Charities() {
     const handleSave = async () => {
         if (!selected) { setMessage('Please select a charity first!'); return }
         setSaving(true)
-        await supabase.from('users').update({ charity_id: selected, charity_percent: parseInt(percent) }).eq('id', user.id)
-        setMessage('Charity saved!')
+        try {
+            const { data: { session } } = await supabase.auth.getSession()
+            const res = await fetch('/api/user/update-charity', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+                body: JSON.stringify({ userId: user.id, charityId: selected, percent: parseInt(percent) })
+            })
+            const data = await res.json()
+            if (data.error) setMessage(`Error: ${data.error}`)
+            else { 
+                setMessage('Charity saved and subscription synced!')
+                setTimeout(() => router.push('/dashboard'), 1500)
+            }
+        } catch (err) {
+            setMessage('Failed to save charity.')
+        }
         setSaving(false)
-        setTimeout(() => router.push('/dashboard'), 1200)
     }
 
     const categories = ['all', ...new Set(charities.map(c => c.category).filter(Boolean))]

@@ -238,6 +238,23 @@ export default function Admin() {
         fetchAll()
     }
 
+    const connectStripeCharity = async (charityId) => {
+        setCharityMsg('Generating secure Stripe onboarding link...')
+        try {
+            const { data: { session } } = await supabase.auth.getSession()
+            const res = await fetch('/api/admin/charities/connect', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+                body: JSON.stringify({ charityId, action: 'create_connect_account' })
+            })
+            const data = await res.json()
+            if (data.error) setCharityMsg(`Error: ${data.error}`)
+            else window.location.href = data.url
+        } catch (err) {
+            setCharityMsg('Failed to fetch connect link.')
+        }
+    }
+
     const cancelSubscription = async (userId, email) => {
         if (!window.confirm(`Are you sure you want to cancel the active Stripe subscription for ${email}?`)) return
         setLoading(true)
@@ -640,6 +657,11 @@ export default function Admin() {
                                                 <span className="text-xs px-2 py-0.5 rounded-full border capitalize" style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text-3)' }}>{c.category}</span>
                                             )}
                                         </div>
+                                        {c.stripe_account_id ? (
+                                            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700 w-fit mb-1 block">✓ Stripe Connected</span>
+                                        ) : (
+                                            <button onClick={() => connectStripeCharity(c.id)} className="text-xs font-bold px-3 py-1 rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200 transition text-left mt-1 mb-2 max-w-fit block">Link Stripe Account →</button>
+                                        )}
                                         <p className="text-sm" style={{ color: 'var(--text-2)' }}>{c.description}</p>
                                     </div>
                                     <div className="flex items-center gap-2 ml-4 flex-shrink-0">

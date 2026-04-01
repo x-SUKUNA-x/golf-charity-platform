@@ -238,6 +238,25 @@ export default function Admin() {
         fetchAll()
     }
 
+    const cancelSubscription = async (userId, email) => {
+        if (!window.confirm(`Are you sure you want to cancel the active Stripe subscription for ${email}?`)) return
+        setLoading(true)
+        try {
+            const { data: { session } } = await supabase.auth.getSession()
+            const res = await fetch('/api/admin/users/action', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+                body: JSON.stringify({ userId, action: 'cancel' })
+            })
+            const data = await res.json()
+            if (data.error) alert(`Error: ${data.error}`)
+            else { alert(data.message); fetchAll() }
+        } catch (err) {
+            alert('Request failed.')
+        }
+        setLoading(false)
+    }
+
     const loadingEl = <main className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}><Spinner /></main>
     if (authLoading) return loadingEl
     if (!adminUser) return null
@@ -353,7 +372,7 @@ export default function Admin() {
                         <table className="w-full">
                             <thead>
                                 <tr className="border-b" style={{ borderColor: 'var(--border)' }}>
-                                    {['Email', 'Plan', 'Status', 'Charity %', 'Renewal', 'Scores'].map(h => (
+                                    {['Email', 'Plan', 'Status', 'Charity %', 'Renewal', 'Actions'].map(h => (
                                         <th key={h} className="text-left p-4 text-sm font-normal" style={{ color: 'var(--text-3)' }}>{h}</th>
                                     ))}
                                 </tr>
@@ -377,12 +396,19 @@ export default function Admin() {
                                         <td className="p-4 text-sm" style={{ color: 'var(--text-3)' }}>
                                             {u.subscription_end_date ? new Date(u.subscription_end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
                                         </td>
-                                        <td className="p-4">
+                                        <td className="p-4 flex gap-2 items-center h-full mt-1.5">
                                             <button onClick={() => openUserScores(u.id)}
                                                 className="text-xs font-medium px-3 py-1.5 rounded-xl border transition"
                                                 style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text-2)' }}>
-                                                Edit Scores
+                                                Scores
                                             </button>
+                                            {u.subscription_status === 'active' && (
+                                                <button onClick={() => cancelSubscription(u.id, u.email)}
+                                                    className="text-xs font-medium px-3 py-1.5 rounded-xl transition text-red-600 border border-red-200 hover:bg-red-50"
+                                                    style={{ background: 'var(--bg)' }}>
+                                                    Cancel Sub
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}

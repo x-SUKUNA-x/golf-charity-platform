@@ -33,71 +33,56 @@ function SubscribeContent() {
     }
 
     if (authLoading) return (
-        <main className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center">
+        <main className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
             <Spinner />
         </main>
     )
 
     const plans = [
         {
-            id: 'monthly',
-            label: 'Monthly',
-            price: '£9.99',
-            per: '/month',
-            sub: null,
-            badge: null,
+            id: 'monthly', label: 'Monthly', price: '£9.99', per: '/month', sub: null, badge: null,
             features: ['Monthly prize draw entry', 'Score tracking & history', 'Charity contribution', 'Cancel anytime'],
         },
         {
-            id: 'yearly',
-            label: 'Yearly',
-            price: '£99.99',
-            per: '/year',
-            sub: '£8.33/month billed annually',
-            badge: 'Save 17%',
+            id: 'yearly', label: 'Yearly', price: '£99.99', per: '/year', sub: '£8.33/month billed annually', badge: 'Save 17%',
             features: ['Everything in Monthly', '2 months free', 'Priority support', 'Early draw access'],
         },
     ]
 
     return (
-        <main className="min-h-screen bg-[#0a0a0a] text-white">
-            {/* Ambient glow */}
-            <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[700px] h-[400px] pointer-events-none"
-                style={{ background: 'radial-gradient(ellipse at center top, rgba(232,160,32,0.08) 0%, transparent 70%)' }} />
+        <main className="min-h-screen" style={{ background: 'var(--bg)' }}>
+            {/* Ambient */}
+            <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] pointer-events-none"
+                style={{ background: 'radial-gradient(ellipse at center top, rgba(232,160,32,0.1) 0%, transparent 70%)' }} />
 
-            {/* NAVBAR */}
-            <nav className="flex justify-between items-center px-6 md:px-8 py-5 border-b border-white/[0.05]">
+            {/* NAV */}
+            <nav className="flex justify-between items-center px-6 md:px-8 py-5 border-b"
+                style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
                 <NavLogo />
-                <Link href="/dashboard" className="text-white/30 hover:text-white text-sm transition">
-                    ← Back
-                </Link>
+                <Link href="/dashboard" className="text-sm transition" style={{ color: 'var(--text-3)' }}>← Back</Link>
             </nav>
 
             <div className="max-w-3xl mx-auto px-6 py-16 relative">
 
-                {/* CANCELLED */}
                 {cancelled && (
-                    <div className="rounded-2xl p-4 mb-8 text-center border border-white/10 bg-white/[0.03]">
-                        <p className="text-white/50 text-sm">Payment was cancelled — choose a plan and try again.</p>
+                    <div className="rounded-2xl p-4 mb-8 text-center border"
+                        style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+                        <p className="text-sm" style={{ color: 'var(--text-2)' }}>Payment was cancelled — choose a plan and try again.</p>
                     </div>
                 )}
-
-                {/* ERROR */}
                 {error && (
-                    <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 mb-8 text-center">
-                        <p className="text-red-400 text-sm">{error}</p>
+                    <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-8 text-center">
+                        <p className="text-red-600 text-sm">{error}</p>
                     </div>
                 )}
 
                 {/* HEADER */}
                 <div className="text-center mb-14">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] mb-3" style={{ color: 'var(--accent)' }}>
-                        Pricing
-                    </p>
-                    <h1 className="text-4xl md:text-5xl font-black tracking-tighter mb-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] mb-3" style={{ color: 'var(--accent-dark)' }}>Pricing</p>
+                    <h1 className="text-4xl md:text-5xl font-black tracking-tighter mb-3" style={{ color: 'var(--text)' }}>
                         One simple plan.<br />One big impact.
                     </h1>
-                    <p className="text-white/40 text-base">Cancel anytime. No hidden fees. Charity giving from day one.</p>
+                    <p className="text-base" style={{ color: 'var(--text-2)' }}>Cancel anytime. No hidden fees. Charity giving from day one.</p>
                 </div>
 
                 {/* PLANS */}
@@ -111,20 +96,18 @@ function SubscribeContent() {
                                 className="relative p-8 rounded-2xl border-2 cursor-pointer transition-all duration-200"
                                 style={isSelected ? {
                                     borderColor: 'var(--accent)',
-                                    background: 'rgba(232,160,32,0.07)',
+                                    background: 'rgba(232,160,32,0.06)',
+                                    boxShadow: '0 4px 20px rgba(232,160,32,0.15)',
                                 } : {
-                                    borderColor: 'rgba(255,255,255,0.08)',
-                                    background: 'rgba(255,255,255,0.025)',
-                                }}
-                            >
-                                {/* Save badge */}
+                                    borderColor: 'var(--border)',
+                                    background: 'var(--surface)',
+                                }}>
                                 {plan.badge && (
                                     <div className="absolute top-4 left-4 text-xs font-bold px-3 py-1 rounded-full"
                                         style={{ background: 'var(--accent)', color: '#000' }}>
                                         {plan.badge}
                                     </div>
                                 )}
-                                {/* Selected indicator */}
                                 {isSelected && (
                                     <div className="absolute top-4 right-4 w-5 h-5 rounded-full flex items-center justify-center"
                                         style={{ background: 'var(--accent)' }}>
@@ -133,13 +116,12 @@ function SubscribeContent() {
                                         </svg>
                                     </div>
                                 )}
-
-                                <p className="text-white/40 text-sm mb-4 mt-4">{plan.label}</p>
+                                <p className="text-sm mt-4 mb-4" style={{ color: 'var(--text-2)' }}>{plan.label}</p>
                                 <div className="flex items-end gap-1 mb-1">
-                                    <span className="text-5xl font-black">{plan.price}</span>
-                                    <span className="text-white/30 mb-2 text-sm">{plan.per}</span>
+                                    <span className="text-5xl font-black" style={{ color: 'var(--text)' }}>{plan.price}</span>
+                                    <span className="mb-2 text-sm" style={{ color: 'var(--text-3)' }}>{plan.per}</span>
                                 </div>
-                                {plan.sub && <p className="text-white/30 text-sm mb-6">{plan.sub}</p>}
+                                {plan.sub && <p className="text-sm mb-5" style={{ color: 'var(--text-3)' }}>{plan.sub}</p>}
                                 <div className="flex flex-col gap-3 mt-5">
                                     {plan.features.map(f => <CheckItem key={f}>{f}</CheckItem>)}
                                 </div>
@@ -148,26 +130,18 @@ function SubscribeContent() {
                     })}
                 </div>
 
-                {/* SUBSCRIBE BUTTON */}
-                <CTAButton
-                    onClick={handleSubscribe}
-                    loading={loading}
-                    className="w-full py-4 text-base rounded-2xl"
-                >
+                <CTAButton onClick={handleSubscribe} loading={loading} className="w-full py-4 text-base rounded-2xl">
                     {loading ? 'Processing...' : `Subscribe ${selected === 'monthly' ? 'Monthly' : 'Yearly'} →`}
                 </CTAButton>
 
-                {/* Trust line */}
-                <div className="flex items-center justify-center gap-6 mt-5 text-white/20 text-xs">
+                <div className="flex items-center justify-center gap-5 mt-5 text-xs" style={{ color: 'var(--text-3)' }}>
                     <span className="flex items-center gap-1.5">
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                         </svg>
                         Secure checkout
                     </span>
-                    <span>·</span>
-                    <span>Cancel anytime</span>
-                    <span>·</span>
+                    <span>·</span><span>Cancel anytime</span><span>·</span>
                     <span className="flex items-center gap-1.5">
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
@@ -177,8 +151,8 @@ function SubscribeContent() {
                 </div>
 
                 {/* PRIZE BREAKDOWN */}
-                <div className="mt-16 border-t border-white/[0.05] pt-12">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-center mb-8 text-white/30">
+                <div className="mt-16 border-t pt-12" style={{ borderColor: 'var(--border)' }}>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-center mb-8" style={{ color: 'var(--text-3)' }}>
                         What you're playing for
                     </p>
                     <div className="grid grid-cols-3 gap-4">
@@ -187,20 +161,15 @@ function SubscribeContent() {
                             { match: '4 numbers', share: '35%', label: 'Major prize', featured: false },
                             { match: '3 numbers', share: '25%', label: 'Prize', featured: false },
                         ].map((tier) => (
-                            <div key={tier.match}
-                                className="text-center p-6 rounded-2xl border"
+                            <div key={tier.match} className="text-center p-6 rounded-2xl border"
                                 style={tier.featured ? {
-                                    background: 'rgba(232,160,32,0.08)',
-                                    borderColor: 'rgba(232,160,32,0.2)',
+                                    background: 'rgba(232,160,32,0.08)', borderColor: 'rgba(232,160,32,0.25)',
                                 } : {
-                                    background: 'rgba(255,255,255,0.025)',
-                                    borderColor: 'rgba(255,255,255,0.06)',
+                                    background: 'var(--surface)', borderColor: 'var(--border)',
                                 }}>
-                                <p className="text-3xl font-black" style={tier.featured ? { color: 'var(--accent)' } : {}}>
-                                    {tier.share}
-                                </p>
-                                <p className="text-white/40 text-sm mt-1">{tier.label}</p>
-                                <p className="text-white/20 text-xs mt-1">Match {tier.match}</p>
+                                <p className="text-3xl font-black" style={{ color: tier.featured ? 'var(--accent-dark)' : 'var(--text)' }}>{tier.share}</p>
+                                <p className="text-sm mt-1" style={{ color: 'var(--text-2)' }}>{tier.label}</p>
+                                <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Match {tier.match}</p>
                             </div>
                         ))}
                     </div>
@@ -213,7 +182,7 @@ function SubscribeContent() {
 export default function Subscribe() {
     return (
         <Suspense fallback={
-            <main className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center">
+            <main className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
                 <Spinner />
             </main>
         }>

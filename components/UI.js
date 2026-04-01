@@ -1,7 +1,6 @@
 'use client'
 import Link from 'next/link'
 
-/* ─── Logo mark ─────────────────────────────────────────────────────────── */
 export function LogoMark({ size = 7 }) {
     return (
         <div className={`w-${size} h-${size} rounded-lg flex items-center justify-center flex-shrink-0`}
@@ -11,65 +10,59 @@ export function LogoMark({ size = 7 }) {
     )
 }
 
-/* ─── Branded nav link ───────────────────────────────────────────────────── */
 export function NavLogo({ href = '/' }) {
     return (
         <Link href={href} className="flex items-center gap-2">
             <LogoMark />
-            <span className="text-white font-semibold tracking-tight text-base">GolfGives</span>
+            <span className="font-semibold tracking-tight text-base" style={{ color: 'var(--text)' }}>GolfGives</span>
         </Link>
     )
 }
 
-/* ─── Page spinner ───────────────────────────────────────────────────────── */
 export function Spinner({ size = 8 }) {
     return (
-        <div className={`w-${size} h-${size} rounded-full border-2 border-white/10 animate-spin`}
-            style={{ borderTopColor: 'var(--accent)' }} />
+        <div className={`w-${size} h-${size} rounded-full border-2 animate-spin`}
+            style={{ borderColor: 'rgba(0,0,0,0.1)', borderTopColor: 'var(--accent)' }} />
     )
 }
 
-/* ─── Full-page loading screen ───────────────────────────────────────────── */
 export function LoadingScreen() {
     return (
-        <main className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center">
+        <main className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
             <div className="flex flex-col items-center gap-4">
                 <Spinner />
-                <p className="text-white/30 text-sm">Loading...</p>
+                <p className="text-sm" style={{ color: 'var(--text-3)' }}>Loading...</p>
             </div>
         </main>
     )
 }
 
-/* ─── Amber CTA button ───────────────────────────────────────────────────── */
 export function CTAButton({ onClick, disabled, loading, children, className = '', type = 'button' }) {
     return (
         <button
             type={type}
             onClick={onClick}
             disabled={disabled || loading}
-            className={`btn-cta font-bold rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed ${className}`}
+            className={`btn-cta rounded-xl ${className}`}
         >
             {loading ? 'Loading...' : children}
         </button>
     )
 }
 
-/* ─── Auth card wrapper ──────────────────────────────────────────────────── */
 export function AuthCard({ children }) {
     return (
-        <main className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center px-4 relative overflow-hidden">
-            {/* Ambient glow */}
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[400px] pointer-events-none"
-                style={{ background: 'radial-gradient(ellipse at center top, rgba(232,160,32,0.1) 0%, transparent 70%)' }} />
+        <main className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden"
+            style={{ background: 'var(--bg)' }}>
+            {/* Subtle top glow */}
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[320px] pointer-events-none"
+                style={{ background: 'radial-gradient(ellipse at center top, rgba(232,160,32,0.12) 0%, transparent 70%)' }} />
             <div className="relative w-full max-w-md animate-scale-in">
-                {/* Logo */}
-                <div className="flex justify-center mb-8">
+                <div className="flex justify-center mb-7">
                     <NavLogo href="/" />
                 </div>
-                {/* Card */}
-                <div className="rounded-2xl p-8 border border-white/[0.08]"
-                    style={{ background: 'rgba(255,255,255,0.03)' }}>
+                <div className="rounded-2xl p-8 border"
+                    style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: '0 2px 16px rgba(0,0,0,0.06)' }}>
                     {children}
                 </div>
             </div>
@@ -77,60 +70,64 @@ export function AuthCard({ children }) {
     )
 }
 
-/* ─── Styled input ───────────────────────────────────────────────────────── */
-export function Input({ type = 'text', placeholder, value, onChange, className = '' }) {
+export function Input({ type = 'text', placeholder, value, onChange, className = '', min, max }) {
     return (
         <input
             type={type}
             placeholder={placeholder}
             value={value}
             onChange={onChange}
-            className={`w-full bg-white/[0.04] border border-white/10 rounded-xl px-4 py-3 text-white text-sm placeholder:text-white/25 transition-all duration-200 focus:outline-none focus:border-[var(--accent)] focus:bg-white/[0.06] ${className}`}
+            min={min}
+            max={max}
+            className={`w-full rounded-xl px-4 py-3 text-sm transition-all duration-200 focus:outline-none ${className}`}
+            style={{
+                background: 'rgba(0,0,0,0.03)',
+                border: '1px solid var(--border)',
+                color: 'var(--text)',
+            }}
+            onFocus={e => { e.target.style.borderColor = 'var(--accent)'; e.target.style.background = 'rgba(232,160,32,0.04)' }}
+            onBlur={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.background = 'rgba(0,0,0,0.03)' }}
         />
     )
 }
 
-/* ─── Error / banner ─────────────────────────────────────────────────────── */
 export function ErrorBanner({ message }) {
     if (!message) return null
     return (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 mb-5">
-            <p className="text-red-400 text-sm">{message}</p>
+        <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-5">
+            <p className="text-red-600 text-sm">{message}</p>
         </div>
     )
 }
 
-/* ─── Success banner ─────────────────────────────────────────────────────── */
 export function SuccessBanner({ message }) {
     if (!message) return null
     return (
         <div className="rounded-xl p-3 mb-5 border"
-            style={{ background: 'rgba(232,160,32,0.08)', borderColor: 'rgba(232,160,32,0.2)' }}>
-            <p className="text-sm font-medium" style={{ color: 'var(--accent)' }}>{message}</p>
+            style={{ background: 'rgba(232,160,32,0.08)', borderColor: 'rgba(232,160,32,0.25)' }}>
+            <p className="text-sm font-medium" style={{ color: 'var(--accent-dark)' }}>{message}</p>
         </div>
     )
 }
 
-/* ─── Checkmark list item ────────────────────────────────────────────────── */
 export function CheckItem({ children }) {
     return (
         <div className="flex items-center gap-3">
             <div className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
                 style={{ background: 'rgba(232,160,32,0.15)' }}>
                 <svg width="8" height="8" viewBox="0 0 12 12" fill="none">
-                    <path d="M2 6l3 3 5-5" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M2 6l3 3 5-5" stroke="var(--accent-dark)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
             </div>
-            <span className="text-white/60 text-sm">{children}</span>
+            <span className="text-sm" style={{ color: 'var(--text-2)' }}>{children}</span>
         </div>
     )
 }
 
-/* ─── Section label ──────────────────────────────────────────────────────── */
 export function SectionLabel({ children }) {
     return (
         <p className="text-xs font-semibold uppercase tracking-[0.18em] mb-3"
-            style={{ color: 'var(--accent)' }}>
+            style={{ color: 'var(--accent-dark)' }}>
             {children}
         </p>
     )

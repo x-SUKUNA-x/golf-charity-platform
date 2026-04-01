@@ -55,8 +55,8 @@ export default function Admin() {
     const jackpotAmount = (prizePool * 0.40).toFixed(2)
     const majorAmount = (prizePool * 0.35).toFixed(2)
     const prizeAmount = (prizePool * 0.25).toFixed(2)
-    const lastDraw = draws[0]
-    const jackpotRolledOver = lastDraw?.jackpot_rolled_over || 0
+    const lastPublishedDraw = draws.find(d => d.status === 'published')
+    const jackpotRolledOver = lastPublishedDraw?.jackpot_rolled_over || 0
 
     const generateRandomNumbers = () => {
         const numbers = []
@@ -108,7 +108,8 @@ export default function Admin() {
         }
 
         const numbers = simulationResult
-        const prevJackpotRollover = draws.find(d => d.status === 'published' && d.jackpot_rolled_over > 0)?.jackpot_rolled_over || 0
+        const lastPublishedDrawForRollover = draws.find(d => d.status === 'published')
+        const prevJackpotRollover = lastPublishedDrawForRollover?.jackpot_rolled_over || 0
         const totalJackpot = parseFloat(jackpotAmount) + prevJackpotRollover
         const { data: draw } = await supabase.from('draws').insert({
             month, winning_numbers: numbers, status: 'pending', draw_mode: drawMode,
@@ -117,16 +118,23 @@ export default function Admin() {
         let jackpotWon = false
         if (draw) {
             const activeSubs = users.filter(u => u.subscription_status === 'active').map(u => u.id)
-            const { data: allScores } = await supabase.from('scores').select('user_id, score')
+            const { data: allScores } = await supabase.from('scores').select('user_id, score, played_at').order('played_at', { ascending: false })
 
-            // Group scores per user (deduplicated — BUG FIX #2)
-            const userScoresMap = {}
+            // Group recent 5 scores per user (deduplicated AND limited)
+            const userScoresList = {}
             allScores?.forEach(s => {
                 if (activeSubs.includes(s.user_id)) {
-                    if (!userScoresMap[s.user_id]) userScoresMap[s.user_id] = new Set()
-                    userScoresMap[s.user_id].add(s.score)
+                    if (!userScoresList[s.user_id]) userScoresList[s.user_id] = []
+                    if (userScoresList[s.user_id].length < 5) {
+                        userScoresList[s.user_id].push(s.score)
+                    }
                 }
             })
+
+            const userScoresMap = {}
+            for (const [userId, scoresList] of Object.entries(userScoresList)) {
+                userScoresMap[userId] = new Set(scoresList)
+            }
 
             // Identify winners by tier and count per tier for prize splitting (BUG FIX #1)
             const tierWinners = { '5-match': [], '4-match': [], '3-match': [] }

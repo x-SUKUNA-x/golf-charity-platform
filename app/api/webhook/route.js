@@ -12,9 +12,19 @@ const supabase = createClient(
 
 export const runtime = 'nodejs'
 
-// Helper: find user by Stripe customer email
+// Helper: find user by Stripe customer ID directly, with email fallback
 async function findUserByStripeCustomer(customerId) {
     try {
+        // Try robust lookup first (requires stripe_customer_id column)
+        const { data: directMatch } = await supabase
+            .from('users')
+            .select('*')
+            .eq('stripe_customer_id', customerId)
+            .single()
+            
+        if (directMatch) return directMatch
+
+        // Fallback: lookup via Stripe API's customer email (brittle but works locally)
         const customer = await stripe.customers.retrieve(customerId)
         if (!customer || customer.deleted || !customer.email) return null
         const { data } = await supabase
@@ -51,14 +61,29 @@ export async function POST(req) {
             return NextResponse.json({ received: true })
         }
 
-        // Only update columns that exist in the users table
-        const { error } = await supabase
+        // Robust update: save stripe IDs
+        let { error } = await supabase
             .from('users')
             .update({
                 subscription_status: 'active',
                 plan: plan || 'monthly',
+                stripe_customer_id: session.customer,
+                stripe_subscription_id: session.subscription
             })
             .eq('id', userId)
+
+        // Fallback if stripe columns don't exist yet in the database schema
+        if (error && error.message.includes('Could not find')) {
+            console.error('Missing stripe columns in schema. Falling back to old update.')
+            const res = await supabase
+                .from('users')
+                .update({
+                    subscription_status: 'active',
+                    plan: plan || 'monthly',
+                })
+                .eq('id', userId)
+            error = res.error
+        }
 
         if (error) {
             console.error('Error activating subscription:', error.message)

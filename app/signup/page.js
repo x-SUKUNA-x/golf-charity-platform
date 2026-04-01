@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { AuthCard, Input, CTAButton, ErrorBanner } from '@/components/UI'
 
 export default function Signup() {
     const router = useRouter()
@@ -15,25 +16,21 @@ export default function Signup() {
     const handleSignup = async () => {
         setLoading(true)
         setError('')
-
         if (!name || !email || !password) {
-            setError('Please fill in all fields!')
+            setError('Please fill in all fields.')
             setLoading(false)
             return
         }
-
         const { data, error } = await supabase.auth.signUp({
             email,
             password,
             options: { data: { full_name: name } }
         })
-
         if (error) {
             setError(error.message)
             setLoading(false)
             return
         }
-
         if (data?.user) {
             const { error: insertError } = await supabase.from('users').insert({
                 id: data.user.id,
@@ -43,55 +40,65 @@ export default function Signup() {
             if (insertError) console.log('Insert error:', insertError)
             router.push('/dashboard')
         } else {
-            setError('Something went wrong. Try again!')
+            setError('Something went wrong. Please try again.')
             setLoading(false)
         }
     }
 
     return (
-        <main className="min-h-screen bg-black text-white flex items-center justify-center px-4">
-            <div className="bg-gray-900 p-10 rounded-2xl w-full max-w-md border border-gray-800">
-                <h1 className="text-3xl font-bold mb-2">Create Account</h1>
-                <p className="text-gray-400 mb-8">Join GolfGives today</p>
-
-                {error && <p className="text-red-400 mb-4 bg-red-900/20 p-3 rounded-lg">{error}</p>}
-
-                <div className="flex flex-col gap-4">
-                    <input
-                        type="text"
-                        placeholder="Full Name"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-green-400"
-                    />
-                    <input
-                        type="email"
-                        placeholder="Email Address"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-green-400"
-                    />
-                    <input
-                        type="password"
-                        placeholder="Password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-green-400"
-                    />
-                    <button
-                        onClick={handleSignup}
-                        disabled={loading}
-                        className="bg-green-400 text-black font-bold py-3 rounded-xl hover:bg-green-300 transition disabled:opacity-50"
-                    >
-                        {loading ? 'Creating Account...' : 'Create Account →'}
-                    </button>
-                </div>
-
-                <p className="text-gray-400 text-center mt-6">
-                    Already have an account?{' '}
-                    <Link href="/login" className="text-green-400 hover:underline">Login</Link>
-                </p>
+        <AuthCard>
+            {/* Impact nudge */}
+            <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 mb-6 text-xs font-medium border"
+                style={{ background: 'rgba(232,160,32,0.08)', borderColor: 'rgba(232,160,32,0.15)', color: 'var(--accent)' }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+                10% of your subscription funds a charity you choose
             </div>
-        </main>
+
+            <h1 className="text-2xl font-black tracking-tight mb-1">Create your account</h1>
+            <p className="text-white/40 text-sm mb-7">Join 2,400+ golfers making a difference</p>
+
+            <ErrorBanner message={error} />
+
+            <div className="flex flex-col gap-3">
+                <Input
+                    type="text"
+                    placeholder="Full name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                />
+                <Input
+                    type="email"
+                    placeholder="Email address"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                />
+                <Input
+                    type="password"
+                    placeholder="Password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                />
+                <CTAButton
+                    onClick={handleSignup}
+                    loading={loading}
+                    className="w-full py-3 mt-1"
+                >
+                    Create account →
+                </CTAButton>
+            </div>
+
+            <p className="text-white/20 text-xs text-center mt-4 leading-relaxed">
+                By creating an account you agree to our terms. Cancel anytime.
+            </p>
+
+            <p className="text-white/30 text-sm text-center mt-4">
+                Already a member?{' '}
+                <Link href="/login" className="font-semibold" style={{ color: 'var(--accent)' }}>
+                    Sign in
+                </Link>
+            </p>
+        </AuthCard>
     )
 }
